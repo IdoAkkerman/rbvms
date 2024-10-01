@@ -360,7 +360,7 @@ int main(int argc, char *argv[])
          in>>dtr;
          in.close();
          cout<<"Restarting from step "<<ri-1<<endl;
-         if (dt_gain > 0) dt = dtr;
+         if (dt_gain > 0) { dt = dtr; }
       }
       // Synchronize
       MPI_Bcast(&t, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
