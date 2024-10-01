@@ -1,0 +1,13 @@
+
+gcc   -shared -o libvkvs.so -fPIC von-karman.c
+
+exe=../../build/rbvms/rbvms
+mesh=von-karman-nurbs.mesh 
+
+
+rm output* log*
+
+mpirun -n 1 $exe -m $mesh -o 2  -r 0 \
+--outflow-bdr 4  --weak-bdr 3 -l libvkvs.so \
+-s 45 -dt 0.1 --dt_vis 0.5 -tf 0.1 \
+-lt 1e-1 -ni 1  -ri 10  | tee log0
