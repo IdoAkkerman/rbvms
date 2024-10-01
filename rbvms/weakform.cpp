@@ -37,7 +37,7 @@ IncNavStoIntegrator::IncNavStoIntegrator(Coefficient &mu,
       hmap(0,1) =  hmap(1,0) =  1;
       hmap(1,1) = 2;
    }
-   else if (dim == 2)
+   else if (dim == 3)
    {
       hmap(0,0) = 0;
       hmap(0,1) = hmap(1,0) = 1;
@@ -284,15 +284,32 @@ void IncNavStoIntegrator::AssembleElementGrad(
    elf_u.UseExternalData(elsol[0]->GetData(), dof_u, dim);
    elf_du.UseExternalData(elrate[0]->GetData(), dof_u, dim);
 
-   elmats(0,0)->SetSize(dof_u*dim, dof_u*dim);
-   elmats(0,1)->SetSize(dof_u*dim, dof_p);
-   elmats(1,0)->SetSize(dof_p, dof_u*dim);
-   elmats(1,1)->SetSize(dof_p, dof_p);
+   DenseMatrix &mat_wu = *elmats(0,0);
+   DenseMatrix &mat_wp = *elmats(0,1);
+   DenseMatrix &mat_qu = *elmats(1,0);
+   DenseMatrix &mat_qp = *elmats(1,1);
 
-   *elmats(0,0) = 0.0;
-   *elmats(0,1) = 0.0;
-   *elmats(1,0) = 0.0;
-   *elmats(1,1) = 0.0;
+   // elmats(0,0)->SetSize(dof_u*dim, dof_u*dim);
+   // elmats(0,1)->SetSize(dof_u*dim, dof_p);
+   // elmats(1,0)->SetSize(dof_p, dof_u*dim);
+   // elmats(1,1)->SetSize(dof_p, dof_p);
+
+   // *elmats(0,0) = 0.0;
+   // *elmats(0,1) = 0.0;
+   // *elmats(1,0) = 0.0;
+   // *elmats(1,1) = 0.0;
+
+   DenseMatrix mat_wu1(dof_u, dof_u);
+
+   mat_wu.SetSize(dof_u*dim, dof_u*dim);
+   mat_wp.SetSize(dof_u*dim, dof_p);
+   mat_qu.SetSize(dof_p, dof_u*dim);
+   mat_qp.SetSize(dof_p, dof_p);
+   mat_wu1 = 0.0;
+   mat_wu = 0.0;
+   mat_wp = 0.0;
+   mat_qu = 0.0;
+   mat_qp = 0.0;
 
    sh_u.SetSize(dof_u);
    shg_u.SetSize(dof_u, dim);
@@ -300,6 +317,8 @@ void IncNavStoIntegrator::AssembleElementGrad(
    dupdu.SetSize(dof_u);
    sh_p.SetSize(dof_p);
    shg_p.SetSize(dof_p, dim);
+
+   DenseMatrix shg_uT(dim, dof_u);
 
    int intorder = 2*el[0]->GetOrder();
    const IntegrationRule &ir = IntRules.Get(el[0]->GetGeomType(), intorder);
@@ -369,83 +388,96 @@ void IncNavStoIntegrator::AssembleElementGrad(
       // Recompute convective gradient
       MultAtB(elf_u, shg_u, grad_u);
 
+      shg_uT.Transpose(shg_u);
+
       // Momentum - Velocity block (w,u)
-      for (int i_u = 0; i_u < dof_u; ++i_u)
+      for (int j_u = 0; j_u < dof_u; ++j_u)
       {
-         for (int j_u = 0; j_u < dof_u; ++j_u)
+         real_t tmp1 = sh_u(j_u);
+         real_t tmp2 = dupdu(j_u);
+         for (int i_u = 0; i_u < dof_u; ++i_u)
          {
+
             // Diffusion
             real_t mat = 0.0;
             for (int dim_u = 0; dim_u < dim; ++dim_u)
             {
-               mat += shg_u(i_u,dim_u)*shg_u(j_u,dim_u);
+             //  mat += shg_u(i_u,dim_u)*shg_u(j_u,dim_u);
+               mat += shg_uT(dim_u, i_u)*shg_uT(dim_u, j_u);
             }
             mat *= mu*dt;
 
             // Acceleration
-            mat += sh_u(i_u)*sh_u(j_u);
+            mat += sh_u(i_u)*tmp1;
 
             // Convection -- frozen convection
-            mat -= ushg_u(i_u)*sh_u(j_u)*dt;           // Galerkin
-            mat -= ushg_u(i_u)*dupdu(j_u);             // SUPG
+            mat -= ushg_u(i_u)*(tmp1*dt+tmp2);   // tmp1 = Galerkin tmp2 = SUPG
 
-            mat *= w;
-            for (int dim_u = 0; dim_u < dim; ++dim_u)
-            {
-               (*elmats(0,0))(i_u + dim_u*dof_u, j_u + dim_u*dof_u) += mat;
-            }
+            mat_wu1(i_u, j_u) += mat*w;
+         }
+      }
+
+      for (int j_dim = 0; j_dim < dim; ++j_dim)
+      {
+         for (int j_u = 0; j_u < dof_u; ++j_u)
+         {
+            real_t tmp1 = shg_u(j_u,j_dim)*w*dt;
 
             for (int i_dim = 0; i_dim < dim; ++i_dim)
             {
-               for (int j_dim = 0; j_dim < dim; ++j_dim)
+               real_t tmp2 = shg_uT(i_dim,j_u)*w*dt;
+               for (int i_u = 0; i_u < dof_u; ++i_u)
                {
-                  (*elmats(0,0))(i_u + i_dim*dof_u, j_u + j_dim*dof_u)
-                  += mu*shg_u(i_u,j_dim)*shg_u(j_u,i_dim)*w*dt;
+                  mat_wu(i_u + i_dim*dof_u, j_u + j_dim*dof_u)
+                  += mu*shg_u(i_u,j_dim)*tmp2 + tau_c*shg_u(i_u,i_dim)*tmp1;
                }
             }
-            for (int i_dim = 0; i_dim < dim; ++i_dim)
-            {
-               for (int j_dim = 0; j_dim < dim; ++j_dim)
-               {
-                  (*elmats(0,0))(i_u + i_dim*dof_u, j_u + j_dim*dof_u)
-                  += tau_c*shg_u(i_u,i_dim)*shg_u(j_u,j_dim)*w*dt;
-               }
-            }
-
          }
       }
 
       // Momentum - Pressure block (w,p)
       for (int i_p = 0; i_p < dof_p; ++i_p)
       {
-         for (int j_u = 0; j_u < dof_u; ++j_u)
+         real_t tmp1 = sh_p(i_p);
+         for (int dim_u = 0; dim_u < dim; ++dim_u)
          {
-            for (int dim_u = 0; dim_u < dim; ++dim_u)
+            for (int j_u = 0; j_u < dof_u; ++j_u)
             {
-               (*elmats(0,1))(j_u + dof_u * dim_u, i_p)
+               mat_wp(j_u + dof_u * dim_u, i_p)
                += (shg_p(i_p,dim_u)*tau_m*ushg_u(j_u)
-                   - shg_u(j_u,dim_u)*sh_p(i_p))*w*dt;
+                   - shg_u(j_u,dim_u)*tmp1)*w*dt;
             }
          }
       }
 
       // Continuity - Velocity block (q,u)
-      for (int i_p = 0; i_p < dof_p; ++i_p)
+      for (int dim_u = 0; dim_u < dim; ++dim_u)
       {
          for (int j_u = 0; j_u < dof_u; ++j_u)
          {
-            for (int dim_u = 0; dim_u < dim; ++dim_u)
+            real_t tmp1 = shg_u(j_u,dim_u)*w;
+            real_t tmp2 = dupdu(j_u)*w;
+            for (int i_p = 0; i_p < dof_p; ++i_p)
             {
-               (*elmats(1,0))(i_p, j_u + dof_u * dim_u)
-               -= sh_p(i_p)*shg_u(j_u,dim_u)*w*dt;
-               (*elmats(1,0))(i_p, j_u + dof_u * dim_u)
-               += shg_p(i_p, dim_u)*dupdu(j_u)*w;
+               mat_qu(i_p, j_u + dof_u * dim_u)
+               += (-sh_p(i_p)*tmp1*dt + shg_p(i_p, dim_u)*tmp2);
             }
          }
       }
 
       // Continuity - Pressure block (w,p)
-      AddMult_a_AAt(-w*tau_m*dt, shg_p, *elmats(1,1));
+      AddMult_a_AAt(-w*tau_m*dt, shg_p, mat_qp);
+   }
+
+   for (int dim_u = 0; dim_u < dim; ++dim_u)
+   {
+      for (int j_u = 0; j_u < dof_u; ++j_u)
+      {
+         for (int i_u = 0; i_u < dof_u; ++i_u)
+         {
+            mat_wu(i_u + dim_u*dof_u, j_u + dim_u*dof_u) += mat_wu1(i_u, j_u);
+         }
+      }
    }
 
 }
@@ -505,8 +537,14 @@ void IncNavStoIntegrator
 
    elf_u.UseExternalData(elsol[0]->GetData(), dof_u, dim);
 
-   elmats(0,0)->SetSize(dof_u*dim, dof_u*dim);
-   *elmats(0,0) = 0.0;
+   DenseMatrix &mat_wu = *elmats(0,0);
+
+   mat_wu.SetSize(dof_u*dim, dof_u*dim);
+   mat_wu = 0.0;
+
+
+  // DenseMatrix mat_wu1(dof_u, dof_u);
+ //  mat_wu1 = 0.0;
 
    sh_u.SetSize(dof_u);
 
@@ -534,7 +572,7 @@ void IncNavStoIntegrator
       real_t un = u*nor;
 
       // Momentum - Velocity block (w,u)
-      for (int i_u = 0; i_u < dof_u; ++i_u)
+  /*    for (int i_u = 0; i_u < dof_u; ++i_u)
       {
          for (int j_u = 0; j_u < dof_u; ++j_u)
          {
@@ -542,10 +580,39 @@ void IncNavStoIntegrator
 
             for (int dim_u = 0; dim_u < dim; ++dim_u)
             {
-               (*elmats(0,0))(i_u + dim_u*dof_u, j_u + dim_u*dof_u) += mat;
+               mat_wu(i_u + dim_u*dof_u, j_u + dim_u*dof_u) += mat;
             }
          }
       }
+*/
+
+     /* for (int i_u = 0; i_u < dof_u; ++i_u)
+      {
+         for (int j_u = 0; j_u < dof_u; ++j_u)
+         {
+            real_t mat = sh_u(i_u)*sh_u(j_u)*un*w*dt;
+
+            for (int dim_u = 0; dim_u < dim; ++dim_u)
+            {
+               mat_wu(i_u + dim_u*dof_u, j_u + dim_u*dof_u) += mat;
+            }
+         }
+      }*/
+
+
+      for (int dim_u = 0; dim_u < dim; ++dim_u)
+      {
+         for (int j_u = 0; j_u < dof_u; ++j_u)
+         {
+            for (int i_u = 0; i_u < dof_u; ++i_u)
+            {
+               mat_wu(i_u + dim_u*dof_u, j_u + dim_u*dof_u) += sh_u(i_u)*sh_u(j_u)*un*w*dt;
+            }
+         }
+      }
+
+
+
    }
 }
 
@@ -721,26 +788,26 @@ void IncNavStoIntegrator
                for (int j_dim = 0; j_dim < dim; ++j_dim)
                {
                   (*elmats(0,0))(i_u + i_dim*dof_u, j_u + i_dim*dof_u)
-                    -= mu*sh_u(i_u)*nor(j_dim)*shg_u(j_u,j_dim)*w*dt;
+                  -= mu*sh_u(i_u)*nor(j_dim)*shg_u(j_u,j_dim)*w*dt;
                }
                // Consistency 2
                for (int j_dim = 0; j_dim < dim; ++j_dim)
                {
                   (*elmats(0,0))(i_u + i_dim*dof_u, j_u + j_dim*dof_u)
-                    -= mu*sh_u(i_u)*nor(j_dim)*shg_u(j_u,i_dim)*w*dt;
+                  -= mu*sh_u(i_u)*nor(j_dim)*shg_u(j_u,i_dim)*w*dt;
                }
 
                // Dual Consistency 1
                for (int j_dim = 0; j_dim < dim; ++j_dim)
                {
                   (*elmats(0,0))(i_u + i_dim*dof_u, j_u + i_dim*dof_u)
-                    -= mu*shg_u(i_u,j_dim)*nor(j_dim)*sh_u(j_u)*w*dt;
+                  -= mu*shg_u(i_u,j_dim)*nor(j_dim)*sh_u(j_u)*w*dt;
                }
                // Dual Consistency 2
                for (int j_dim = 0; j_dim < dim; ++j_dim)
                {
                   (*elmats(0,0))(i_u + i_dim*dof_u, j_u + j_dim*dof_u)
-                    -= mu*shg_u(i_u,i_dim)*nor(j_dim)*sh_u(j_u)*w*dt;
+                  -= mu*shg_u(i_u,i_dim)*nor(j_dim)*sh_u(j_u)*w*dt;
                }
             }
 
