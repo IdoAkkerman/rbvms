@@ -40,6 +40,7 @@ ExternalProject_Add(hypre
                     CONFIGURE_COMMAND ${CMAKE_COMMAND}
                                       "${PROJECT_SOURCE_DIR}/hypre/src"
                                       "-DHYPRE_INSTALL_PREFIX=${INSTALL_DIR}"
+                                      "-DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}"
                     SOURCE_DIR ${PROJECT_SOURCE_DIR}/hypre
                     BINARY_DIR ${PROJECT_BINARY_DIR}/hypre)
 
@@ -53,6 +54,7 @@ ExternalProject_Add(mfem
                                -DHYPRE_DIR=${INSTALL_DIR}
                                -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}
                                -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+                               -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
                     SOURCE_DIR ${PROJECT_SOURCE_DIR}/mfem
                     BINARY_DIR ${PROJECT_BINARY_DIR}/mfem)
 
@@ -65,5 +67,6 @@ ExternalProject_Add(rbvms
                     CMAKE_ARGS -DMFEM_DIR=${INSTALL_DIR}
                                -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}
                                -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+                               -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
                     SOURCE_DIR ${PROJECT_SOURCE_DIR}/rbvms
                     BINARY_DIR ${PROJECT_BINARY_DIR}/rbvms)

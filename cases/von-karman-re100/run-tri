@@ -1,9 +1,9 @@
 gcc   -shared -o libvkvs.so -fPIC von-karman.c
 
-#gmsh von-karman-tet.geo -2 -clscale 0.35 -format msh22
+#gmsh von-karman-tri.geo -2 -clscale 0.15 -format msh22
 
 exe=../../build/rbvms/rbvms
-mesh=von-karman-tet.msh
+mesh=von-karman-tri.msh
 
 rm output* log*
 

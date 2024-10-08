@@ -1,0 +1,12 @@
+#!/bin/bash
+gcc   -shared -o libfun.so -fPIC poiseuille.c
+
+exe=../../build/rbvms/rbvms
+mesh=poiseuille.mesh
+
+rm  -r output* log* solution
+
+mpirun -n 16 $exe -m $mesh -o 2 -r 7 \
+ --outflow-bdr 2 -l libfun.so \
+-s 21 -dt 0.1 --dt_vis 0.1 -tf 1 \
+-lt 1e-3 -ni 5   | tee log0

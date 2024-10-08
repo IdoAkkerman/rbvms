@@ -30,13 +30,21 @@ lightweight, general, scalable C++ library for finite element methods.
 ## Install
 
 To install RBVMS on a Ubuntu-based machine make sure the appropriate packages are installed.
-This can be done using the following command:
+
+Before installing the packages make sure the machine is updated, by running the folliwing commands in a terminal:
+
+```
+sudo apt-get update
+sudo apt-get upgrade
+```
+
+Install the required packages by running the following command in a terminal:
 
 ```
 sudo apt-get install cmake git build-essential openmpi-common libopenmpi-dev libmetis5 libmetis-dev
 ```
 
-The RBVMS code can be downloaded using the following command
+The RBVMS code can be downloaded using the following command:
 
 ```
 git clone git@github.com:IdoAkkerman/rbvms.git
@@ -46,10 +54,6 @@ or
 ```
 git clone https://github.com/IdoAkkerman/rbvms.git
 
-```
-or
-```
-git clone https://github.com/IdoAkkerman/rbvms.git
 ```
 This will create a directory `rbvms` with the code in it. This code can be compiled using the following commands:
 
@@ -70,24 +74,30 @@ the rbvms executable can be found in the `bin` directory.
 
 ## Cases
 
-2D
-1. Lid driven cavity: tbd
-2. Von Karman vortex street: see cases/von-karman-re100
-3. Naca foil: tbd
+Several test cases are included with rbvms.
 
-3D tbd
-1. Von Karman vortex street
-2. Naca foil
-3. Gresho vortex
-4. Taylor-green vortex
-5. Turbulent channel
-6. Taylor Couette flow
+2D test cases:
+1. Poiseuille flow: go to directory `cases/poiseuille`
+2. Lid driven cavity: go to directory `cases/lid-driven-cavity`
+3. Von Karman vortex street: go to directory `cases/von-karman-re100`
+4. Naca foil: go to directory `cases/naca-foil`
+
+3D test cases: tbd
+1. Channel flow
+2. Von Karman vortex street
+3. Naca foil
+4. Gresho vortex
+5. Taylor-green vortex
+6. Turbulent channel
+7. Taylor Couette flow
 
 ## Run
 The code can be run by running
 ```
 $BUILD/bin/rbvms
 ```
+
+Where `$BUILD` is the directory where `cmake` was run.
 
 To see all the command line options run:
 ```

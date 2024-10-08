@@ -8,6 +8,18 @@ cmake_minimum_required(VERSION 3.8)
 project(RBVMS LANGUAGES CXX C)
 
 #-------------------------------------------------------------------------------
+# Check MFEM_DIR
+#-------------------------------------------------------------------------------
+if(NOT DEFINED MFEM_DIR)
+  message(FATAL_ERROR "MFEM_DIR not defined")
+endif()
+
+message(STATUS "MFEM_DIR = ${MFEM_DIR}")
+if(NOT IS_DIRECTORY ${MFEM_DIR})
+  message(FATAL_ERROR "MFEM_DIR is not a directory")
+endif()
+
+#-------------------------------------------------------------------------------
 # Add Files
 #-------------------------------------------------------------------------------
 set(SOURCES
