@@ -37,7 +37,7 @@ IncNavStoIntegrator::IncNavStoIntegrator(Coefficient &mu,
       hmap(0,1) =  hmap(1,0) =  1;
       hmap(1,1) = 2;
    }
-   else if (dim == 2)
+   else if (dim == 3)
    {
       hmap(0,0) = 0;
       hmap(0,1) = hmap(1,0) = 1;
@@ -481,9 +481,8 @@ void IncNavStoIntegrator
       // Access the neighboring element's integration point
       const IntegrationPoint &eip = Tr.GetElement1IntPoint();
 
-      CalcOrtho(Tr.Jacobian(), nor);
-
-      real_t w = ip.weight * Tr.Weight();// instead???* 0.5;//
+      CalcOrtho(Tr.Jacobian(), nor); // nor = n.da
+      real_t w = ip.weight;          // No weight --> taken care of by nor
 
       el1[0]->CalcPhysShape(*Tr.Elem1, sh_u);
       elf_u.MultTranspose(sh_u, u);
@@ -523,10 +522,8 @@ void IncNavStoIntegrator
       // Access the neighboring element's integration point
       const IntegrationPoint &eip = Tr.GetElement1IntPoint();
 
-      CalcOrtho(Tr.Jacobian(), nor);
-
-      real_t w = ip.weight * Tr.Weight(); //
-      //real_t w = ip.weight * 0.5;// instead???
+      CalcOrtho(Tr.Jacobian(), nor); // nor = n.da
+      real_t w = ip.weight;          // No weight --> taken care of by nor
 
       el1[0]->CalcPhysShape(*Tr.Elem1, sh_u);
       elf_u.MultTranspose(sh_u, u);
