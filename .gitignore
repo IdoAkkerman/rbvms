@@ -17,6 +17,8 @@ cases/*/output_*.dat
 cases/*/restart
 cases/*/solution
 cases/*/gprof*
+cases/*/*.msh
+cases/*/*.bak
 
 # Prerequisites
 *.d
