@@ -74,18 +74,22 @@ the rbvms executable can be found in the `bin` directory.
 
 ## Cases
 
-2D
-1. Lid driven cavity: tbd
-2. Von Karman vortex street: see cases/von-karman-re100
-3. Naca foil: tbd
+Several test cases are included with rbvms.
 
-3D tbd
-1. Von Karman vortex street
-2. Naca foil
-3. Gresho vortex
-4. Taylor-green vortex
-5. Turbulent channel
-6. Taylor Couette flow
+2D test cases:
+1. Poiseuille flow: go to directory `cases/poiseuille`
+2. Lid driven cavity: go to directory `cases/lid-driven-cavity`
+3. Von Karman vortex street: go to directory `cases/von-karman-re100`
+4. Naca foil: go to directory `cases/naca-foil`
+
+3D test cases: tbd
+1. Channel flow
+2. Von Karman vortex street
+3. Naca foil
+4. Gresho vortex
+5. Taylor-green vortex
+6. Turbulent channel
+7. Taylor Couette flow
 
 ## Run
 The code can be run by running
