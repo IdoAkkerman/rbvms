@@ -28,6 +28,26 @@ using namespace mfem;
 extern void printInfo();
 extern void line(int len);
 
+void CheckBoundaries(Array<bool> &bnd_flags,
+                     Array<int> &bc_bnds)
+{
+   int amax = bnd_flags.Size();
+   // Check strong boundaries
+   for (int b = 0; b < bc_bnds.Size(); b++)
+   {
+      int bnd = bc_bnds[b];
+      if ( bnd < 0 || bnd > amax )
+      {
+         mfem_error("Boundary out of range.");
+      }
+      if (bnd_flags[bnd])
+      {
+         mfem_error("Boundary specified more then once.");
+      }
+      bnd_flags[bnd] = true;
+   }
+}
+
 int main(int argc, char *argv[])
 {
    // 1. Initialize MPI and HYPRE and print info
@@ -58,15 +78,22 @@ int main(int argc, char *argv[])
    Array<int> strong_bdr;
    Array<int> weak_bdr;
    Array<int> outflow_bdr;
+   Array<int> master_bdr;
+   Array<int> slave_bdr;
 
    real_t mu_param = 1.0;
    const char *lib_file = "libfun.so";
 
+   args.AddOption(&strong_bdr, "-sbc", "--strong-bdr",
+                  "Boundaries where Dirichelet BCs are enforced strongly.");
    args.AddOption(&weak_bdr, "-wbc", "--weak-bdr",
-                  "List of boundaries where Dirichelet BCs are enforced weakly."
-                  "\n\t - Default: strong Dirichelet BCs");
+                  "Boundaries where Dirichelet BCs are enforced weakly.");
    args.AddOption(&outflow_bdr, "-out", "--outflow-bdr",
-                  "List of outflow boundaries.");
+                  "Outflow boundaries.");
+   args.AddOption(&master_bdr, "-mbc", "--master-bdr",
+                  "Periodic master boundaries.");
+   args.AddOption(&slave_bdr, "-sbc", "--slave-bdr",
+                  "Periodic slave boundaries.");
    args.AddOption(&lib_file, "-l", "--lib",
                   "Library file for case specific function definitions:\n\t"
                   " - Initial condition\n\t"
@@ -159,6 +186,37 @@ int main(int argc, char *argv[])
    ParMesh pmesh(MPI_COMM_WORLD, mesh);
    mesh.Clear();
 
+   // Boundary conditions
+   if (Mpi::Root())
+   {
+      if (strong_bdr.Size()>0) {cout<<"Strong  = "; strong_bdr.Print();}
+      if (weak_bdr.Size()>0) {cout<<"Weak    = "; weak_bdr.Print();}
+      if (outflow_bdr.Size()>0){ cout<<"Outflow = "; outflow_bdr.Print() ;}
+      if (master_bdr.Size()>0) {cout<<"Periodic (master) = "; master_bdr.Print();}
+      if (slave_bdr.Size()>0) {cout<<"Periodic (slave)  = "; slave_bdr.Print();}
+   }
+
+   Array<bool> bnd_flag(pmesh.bdr_attributes.Max()+1);
+   bnd_flag = true;
+   for (int b = 0; b < pmesh.bdr_attributes.Size(); b++)
+   {
+      bnd_flag[pmesh.bdr_attributes[b]] = false;
+   }
+   CheckBoundaries(bnd_flag, strong_bdr);
+   CheckBoundaries(bnd_flag, weak_bdr);
+   CheckBoundaries(bnd_flag, outflow_bdr);
+   CheckBoundaries(bnd_flag, master_bdr);
+   CheckBoundaries(bnd_flag, slave_bdr);
+
+   MFEM_VERIFY(master_bdr.Size() == master_bdr.Size(),
+               "Master-slave count do not match.");
+
+   for (int b = 0; b < bnd_flag.Size(); b++)
+   {
+      MFEM_VERIFY(bnd_flag[b],
+                 "Not all boundaries have a boundary condition set.");
+   }
+
    // Select the time integrator
    unique_ptr<ODESolver> ode_solver = ODESolver::Select(ode_solver_type);
    int nstate = ode_solver->GetState() ? ode_solver->GetState()->MaxSize() : 0;
@@ -175,9 +233,11 @@ int main(int argc, char *argv[])
    fecs[1] = FECollection::NewH1(order, dim, pmesh.IsNURBS());
 
    Array<ParFiniteElementSpace *> spaces(2);
-   spaces[0] = new ParFiniteElementSpace(&pmesh, fecs[0],
-                                         dim); //, Ordering::byVDIM);
-   spaces[1] = new ParFiniteElementSpace(&pmesh, fecs[1]);
+   spaces[0] = new ParFiniteElementSpace(&pmesh, fecs[0], dim, 
+                                         Ordering::byNODES,  //, Ordering::byVDIM);
+                                         master_bdr, slave_bdr);
+   spaces[1] = new ParFiniteElementSpace(&pmesh, fecs[1], 1, Ordering::byNODES,
+                                         master_bdr, slave_bdr);
 
    // Report the degree of freedoms used
    {
@@ -251,63 +311,6 @@ int main(int argc, char *argv[])
    RBVMS::ParTimeDepBlockNonlinForm form(spaces, integrator);
    RBVMS::Evolution evo(form, newton_solver);
    ode_solver->Init(evo);
-
-   // Boundary conditions
-   int amax = spaces[0]->GetMesh()->bdr_attributes.Max();
-   Array<bool> bnd_flag(amax+1);
-   bnd_flag = false;
-
-   // Check weak boundaries
-   if (Mpi::Root() && weak_bdr.Size() > 0 )
-   {
-      cout<<"Weak    = "; weak_bdr.Print();
-   }
-   for (int b = 0; b < weak_bdr.Size(); b++)
-   {
-      if ( weak_bdr[b] < 0 || weak_bdr[b] > amax )
-      {
-         mfem_error("Boundary out of range.");
-      }
-      if (bnd_flag[weak_bdr[b]])
-      {
-         mfem_error("Boundary specified more then once.");
-      }
-      bnd_flag[weak_bdr[b]] = true;
-   }
-
-   // Check outflow boundaries
-   if (Mpi::Root() && outflow_bdr.Size() > 0)
-   {
-      cout<<"Outflow = "; outflow_bdr.Print();
-   }
-   for (int b = 0; b < outflow_bdr.Size(); b++)
-   {
-      if ( outflow_bdr[b] < 0 || outflow_bdr[b] > amax )
-      {
-         mfem_error("Boundary out of range.");
-      }
-      if (bnd_flag[outflow_bdr[b]])
-      {
-         mfem_error("Boundary specified more then once.");
-      }
-      bnd_flag[outflow_bdr[b]] = true;
-   }
-
-   // Assign strong boundaries
-   strong_bdr.SetSize(amax - weak_bdr.Size() - outflow_bdr.Size());
-   strong_bdr = -9;
-   for (int b = 1, s = 0; b < amax+1; b++)
-   {
-      if (!bnd_flag[b])
-      {
-         strong_bdr[s] = b;
-         s++;
-      }
-   }
-   if (Mpi::Root() && strong_bdr.Size() > 0)
-   {
-      cout<<"Strong  = "; strong_bdr.Print();
-   }
 
    // Set boundaries in the weakform
    form.SetStrongBC (strong_bdr);
