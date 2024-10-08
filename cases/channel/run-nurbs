@@ -1,12 +1,21 @@
 #!/bin/bash
+rm libfun.so
 gcc   -shared -o libfun.so -fPIC channel.c
+
 
 exe=../../build/rbvms/rbvms
 mesh=channel.mesh
 
 rm  -r output* log* solution
 
-mpirun -n 16 $exe -m $mesh -o 2 -r 7 \
- --outflow-bdr 2 -l libfun.so \
--s 21 -dt 0.1 --dt_vis 0.1 -tf 1 \
+mpirun -n 16 $exe -m $mesh -o 1 -r 5 \
+ --weak-bdr "1 6" \
+ --master-bdr "2 3" \
+ --slave-bdr "4 5" \
+-l libfun.so \
+-s 21 -dt 0.1 --dt_vis 1 -tf 100 \
 -lt 1e-3 -ni 5   | tee log0
+
+
+ --master-bdr "2 3" \
+ --slave-bdr "4 5" \
