@@ -124,7 +124,7 @@ int main(int argc, char *argv[])
    args.AddOption(&dt_max, "-dtmx", "--dt-max",
                   "Maximum time step size.");
    args.AddOption(&cfl_target, "-cfl", "--cfl-target",
-                  "CFL target .");
+                  "CFL target.");
    args.AddOption(&dt_gain, "-dtg", "--dt-gain",
                   "Gain coefficient for time step adjustment.");
 
@@ -150,7 +150,7 @@ int main(int argc, char *argv[])
    args.AddOption(&restart, "-rs", "--restart", "-f", "--fresh",
                   "Restart from solution.");
    args.AddOption(&restart_interval, "-ri", "--restart-interval",
-                  "Interval between archieved time steps. \n\t"
+                  "Interval between archieved time steps.\n\t"
                   "For negative values output is skipped.");
    args.AddOption(&dt_vis, "-dtv", "--dt_vis",
                   "Time interval between visualization points.");
@@ -210,7 +210,6 @@ int main(int argc, char *argv[])
 
    MFEM_VERIFY(master_bdr.Size() == master_bdr.Size(),
                "Master-slave count do not match.");
-
    for (int b = 0; b < bnd_flag.Size(); b++)
    {
       MFEM_VERIFY(bnd_flag[b],
