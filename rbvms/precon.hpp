@@ -29,6 +29,10 @@ public:
       : BlockLowerTriangularPreconditioner (offsets), prec(offsets.Size()-1)
    { prec = nullptr;};
 
+   /// SetPreconditioners
+   void SetPreconditioner(int i, Solver *pc)
+   { prec[i] = pc; };
+
    /// Set the diagonal and off-diagonal operators
    virtual void SetOperator(const Operator &op);
 

@@ -15,29 +15,16 @@ void JacobianPreconditioner::SetOperator(const Operator &op)
 {
    BlockOperator *jacobian = (BlockOperator *) &op;
 
-   if (prec[0] == nullptr)
-   {
-     // prec[0] = new HypreBoomerAMG();
-      //HypreParMatrix* Jpp = dynamic_cast<HypreParMatrix*>(&jacobian->GetBlock(0,0));
-     // prec[0] = new HypreParaSails(*Jpp);
-      prec[0] = new HypreSmoother();
-   }
-   prec[0]->SetOperator(jacobian->GetBlock(0,0));
-
-   if (prec[1] == nullptr)
-   {
-      HypreParMatrix* Jpp = dynamic_cast<HypreParMatrix*>(&jacobian->GetBlock(1,1));
-      prec[1] = new HypreParaSails(*Jpp);
-   }
-  // prec[1]->SetOperator(jacobian->GetBlock(1,1));
-
    for (int i = 0; i < prec.Size(); ++i)
    {
-      SetDiagonalBlock(i, prec[i]);
-
+      if (prec[i])
+      {
+         prec[i]->SetOperator(jacobian->GetBlock(i,i));
+         SetDiagonalBlock(i, prec[i]);
+      }
       for (int j = i+1; j < prec.Size(); ++j)
       {
-         SetBlock(j,i, const_cast<Operator*>(&jacobian->GetBlock(j,i)));
+         SetBlock(j,i, &jacobian->GetBlock(j,i));
       }
    }
 }
@@ -47,7 +34,7 @@ JacobianPreconditioner::~JacobianPreconditioner()
 {
    for (int i = 0; i < prec.Size(); ++i)
    {
-      delete prec[i];
+      if (prec[i]) delete prec[i];
    }
 }
 

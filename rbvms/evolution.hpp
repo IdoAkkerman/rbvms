@@ -27,13 +27,13 @@ class Evolution : public TimeDependentOperator
 {
 private:
    ParTimeDepBlockNonlinForm &form;
-   Solver &solver;
+   IterativeSolver &solver;
    Vector dudt;
 
 public:
    /// Constructor
    Evolution(ParTimeDepBlockNonlinForm &form,
-             Solver &solver);
+             IterativeSolver &solver);
 
    /// Stub for explicit solve of time dependent problem
    virtual void Mult(const Vector &x, Vector &k) const override { k = 0.0;};
@@ -74,7 +74,7 @@ private:
    Array<int> outflowBdr;
 
    /// Solution & Residual vector
-   mutable Vector x0, x;
+   mutable Vector xs0;
    mutable BlockVector dxs;
    mutable BlockVector dxs_true;
 

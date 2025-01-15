@@ -114,7 +114,7 @@ int main(int argc, char *argv[])
    real_t dt_gain = -1.0;
 
    args.AddOption(&ode_solver_type, "-s", "--ode-solver",
-                  ODESolver::Types.c_str());
+                  ODESolver::ImplicitTypes.c_str());
    args.AddOption(&t_final, "-tf", "--t-final",
                   "Final time; start time is 0.");
    args.AddOption(&dt, "-dt", "--dt",
@@ -147,6 +147,7 @@ int main(int argc, char *argv[])
    bool restart = false;
    int restart_interval = -1;
    real_t dt_vis = 10*dt;
+   const char *vis_dir = "solution";
    args.AddOption(&restart, "-rs", "--restart", "-f", "--fresh",
                   "Restart from solution.");
    args.AddOption(&restart_interval, "-ri", "--restart-interval",
@@ -154,6 +155,9 @@ int main(int argc, char *argv[])
                   "For negative values output is skipped.");
    args.AddOption(&dt_vis, "-dtv", "--dt_vis",
                   "Time interval between visualization points.");
+   args.AddOption(&vis_dir, "-vd", "--vis-dir",
+                  "Directory for visualization files.\n\t");
+
 
    // Parse parameters
    args.Parse();
@@ -233,10 +237,10 @@ int main(int argc, char *argv[])
 
    Array<ParFiniteElementSpace *> spaces(2);
    spaces[0] = new ParFiniteElementSpace(&pmesh, fecs[0], dim, 
-                                         Ordering::byNODES,  //, Ordering::byVDIM);
-                                         master_bdr, slave_bdr);
-   spaces[1] = new ParFiniteElementSpace(&pmesh, fecs[1], 1, Ordering::byNODES,
-                                         master_bdr, slave_bdr);
+                                         Ordering::byNODES  //, Ordering::byVDIM);
+                                        );// ,master_bdr, slave_bdr);
+   spaces[1] = new ParFiniteElementSpace(&pmesh, fecs[1], 1, Ordering::byNODES
+                                         );//  ,master_bdr, slave_bdr);
 
    // Report the degree of freedoms used
    {
@@ -275,6 +279,18 @@ int main(int argc, char *argv[])
 
    // Set up the preconditioner
    RBVMS::JacobianPreconditioner jac_prec(bOffsets);
+
+   Solver* pc_mom = nullptr;
+   Solver* pc_cont= nullptr;
+
+   HypreILU* ilu_mom = new HypreILU();
+   HypreILU* ilu_cont = new HypreILU();
+
+   pc_mom = ilu_mom;
+   pc_cont = ilu_cont;
+
+   jac_prec.SetPreconditioner(0, pc_mom);
+   jac_prec.SetPreconditioner(1, pc_cont);
 
    // Set up the Jacobian solver
    RBVMS::GeneralResidualMonitor j_monitor(MPI_COMM_WORLD,"\t\tFGMRES", 25);
@@ -337,7 +353,7 @@ int main(int argc, char *argv[])
 
    // Define the visualisation output
    VisItDataCollection vdc("step", &pmesh);
-   vdc.SetPrefixPath("solution");
+   vdc.SetPrefixPath(vis_dir);
    vdc.RegisterField("u", &x_u);
    vdc.RegisterField("p", &x_p);
 
@@ -353,7 +369,6 @@ int main(int argc, char *argv[])
    if (restart && stat("restart/step.dat", &info) == 0)
    {
       // Read
-
       if (Mpi::Root())
       {
          real_t dtr;
@@ -502,7 +517,6 @@ int main(int argc, char *argv[])
       {
          // Interpolate solution
          real_t fac = (t-dt_vis*vi)/dt;
-         add (fac, xp0,(1.0-fac), xp, xpi);
 
          // Report to screen
          if (Mpi::Root())
@@ -514,7 +528,10 @@ int main(int argc, char *argv[])
          }
 
          // Copy solution in grid functions
+         add (fac, xp0.GetBlock(0),(1.0-fac), xp.GetBlock(0), xpi.GetBlock(0));
          x_u.Distribute(xpi.GetBlock(0));
+
+         add (-1.0/dt, xp0.GetBlock(1), 1.0/dt, xp.GetBlock(1), xpi.GetBlock(1));
          x_p.Distribute(xpi.GetBlock(1));
 
          // Actually write to file

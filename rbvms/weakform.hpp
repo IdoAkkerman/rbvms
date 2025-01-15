@@ -81,6 +81,12 @@ public:
                            const Array<const Vector *> &elfun,
                            const Array<const Vector *> &elrate);
 
+   /// Assemble the element constant artifical diffusion
+   real_t GetElemArtDiff(const Array<const FiniteElement *> &el,
+                         ElementTransformation &Tr,
+                         const Array<const Vector *> &elsol,
+                         const Array<const Vector *> &elrate);
+
    /// Assemble the element interior residual vectors
    void AssembleElementVector(const Array<const FiniteElement *> &el,
                               ElementTransformation &Tr,
@@ -101,6 +107,7 @@ public:
                               const Array<const FiniteElement *> &el2,
                               FaceElementTransformations &Tr,
                               const Array<const Vector *> &elfun,
+                              const Array<const Vector *> &elrate,
                               const Array<Vector *> &elvect);
 
    /// Assemble the outflow boundary gradient matrices
@@ -108,6 +115,7 @@ public:
                             const Array<const FiniteElement *>&el2,
                             FaceElementTransformations &Tr,
                             const Array<const Vector *> &elfun,
+                            const Array<const Vector *> &elrate,
                             const Array2D<DenseMatrix *> &elmats);
 
 
@@ -116,6 +124,7 @@ public:
                                 const Array<const FiniteElement *> &el2,
                                 FaceElementTransformations &Tr,
                                 const Array<const Vector *> &elfun,
+                                const Array<const Vector *> &elrate,
                                 const Array<Vector *> &elvect);
 
    /// Assemble the weak Dirichlet BC boundary gradient matrices
@@ -123,6 +132,7 @@ public:
                               const Array<const FiniteElement *>&el2,
                               FaceElementTransformations &Tr,
                               const Array<const Vector *> &elfun,
+                              const Array<const Vector *> &elrate,
                               const Array2D<DenseMatrix *> &elmats);
 };
 
