@@ -94,6 +94,6 @@ include_directories(${MFEM_INCLUDE_DIRS})
 #-------------------------------------------------------------------------------
 add_executable(rbvms rbvms.cpp ${SOURCES} ${HEADERS})
 
-target_link_libraries(rbvms PRIVATE ${MFEM_LIBRARIES})
+target_link_libraries(rbvms PRIVATE ${MFEM_LIBRARIES} ${CMAKE_DL_LIBS})
 install(TARGETS rbvms DESTINATION bin)
 
