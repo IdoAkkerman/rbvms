@@ -70,20 +70,22 @@ void IncNavStoIntegrator::GetTau(real_t &tau_m, real_t &tau_c, real_t &cfl2,
    tau_c = 0.0;
    for (int j = 0; j < dim; j++)
    {
+      real_t uj = u[j];
       for (int i = 0; i < dim; i++)
       {
-         tau_c += Gij(i,j)*u[i]*u[j];
+         tau_c += Gij(i,j)*u[i]*uj;
       }
    }
    cfl2 = tau_c/tau_m;
    tau_m += tau_c;
 
    // Diffusive part
+   real_t tmp = Cd*Cd*mu*mu;
    for (int j = 0; j < dim; j++)
    {
       for (int i = 0; i < dim; i++)
       {
-         tau_m  += Cd*Cd*Gij(i,j)*Gij(i,j)*mu*mu;
+         tau_m  += tmp*Gij(i,j)*Gij(i,j);
       }
    }
 
@@ -371,18 +373,38 @@ void IncNavStoIntegrator::AssembleElementGrad(
    DenseMatrix &mat_qu = *elmats(1,0);
    DenseMatrix &mat_qp = *elmats(1,1);
 
-   DenseMatrix mat_wu1(dof_u, dof_u);
-
    mat_wu.SetSize(dof_u*dim, dof_u*dim);
    mat_wp.SetSize(dof_u*dim, dof_p);
    mat_qu.SetSize(dof_p, dof_u*dim);
    mat_qp.SetSize(dof_p, dof_p);
 
-   mat_wu1 = 0.0;
    mat_wu = 0.0;
    mat_wp = 0.0;
    mat_qu = 0.0;
    mat_qp = 0.0;
+
+   DenseMatrix mat_wu1(dof_u, dof_u);
+   mat_wu1 = 0.0;
+   DenseMatrix mat_wp1[dim], mat_qu1[dim], mat_up[dim];
+   for (int i_dim = 0; i_dim < dim; ++i_dim)
+   {
+      mat_wp1[i_dim].SetSize(dof_u,dof_p);
+      mat_qu1[i_dim].SetSize(dof_p,dof_u);
+      mat_up[i_dim].SetSize(dof_u,dof_p);
+      mat_wp1[i_dim] = 0.0;
+      mat_qu1[i_dim] = 0.0;
+      mat_up[i_dim] = 0.0;
+   }
+
+   int dim2 = (dim*(dim+1))/2;
+   DenseMatrix  mat_uu[dim*dim];
+   for (int i_dim = 0; i_dim < dim2; ++i_dim)
+   {
+      mat_uu[i_dim].SetSize(dof_u,dof_u);
+      mat_uu[i_dim] = 0.0;
+   }
+
+   Vector vec_u1(NULL,dof_u), vec_u2(NULL,dof_u), vec_p(NULL,dof_p);
 
    sh_u.SetSize(dof_u);
    shg_u.SetSize(dof_u, dim);
@@ -468,106 +490,67 @@ void IncNavStoIntegrator::AssembleElementGrad(
 
       shg_uT.Transpose(shg_u);
 
-      // Momentum - Velocity block (w,u)
-      for (int j_u = 0; j_u < dof_u; ++j_u)
-      {
-         real_t tmp1 = sh_u(j_u);
-         real_t tmp2 = dupdu(j_u);
-         for (int i_u = 0; i_u < dof_u; ++i_u)
-         {
+      // Momentum - Block diagonal Velocity block (w,u)
+      // Acceleration term
+      AddMult_a_VVt(w, sh_u, mat_wu1);
 
-            // Diffusion
-            real_t mat = 0.0;
-            for (int dim_u = 0; dim_u < dim; ++dim_u)
-            {
-             //  mat += shg_u(i_u,dim_u)*shg_u(j_u,dim_u);
-               mat += shg_uT(dim_u, i_u)*shg_uT(dim_u, j_u);
-            }
-            mat *= mu_eff*dt;
+      // Convection terms
+      AddMult_a_VWt(-dt*w, ushg_u, sh_u, mat_wu1);
+      AddMult_a_VWt(-w, ushg_u, dupdu, mat_wu1);
 
-            // Acceleration
-            mat += sh_u(i_u)*tmp1;
-
-            // Convection -- frozen convection
-            mat -= ushg_u(i_u)*(tmp1*dt+tmp2);   // tmp1 = Galerkin tmp2 = SUPG
-
-            mat_wu1(i_u, j_u) += mat*w;
-         }
-      }
-
-      for (int j_dim = 0; j_dim < dim; ++j_dim)
-      {
-         for (int j_u = 0; j_u < dof_u; ++j_u)
-         {
-            //real_t tmp11 = sh_u(j_u);
-            //real_t tmp22 = dupdu(j_u);
-
-            int j_dof = j_u + j_dim*dof_u;
-            real_t tmp1 = shg_u(j_u,j_dim)*w*dt;
-
-            for (int i_dim = 0; i_dim < dim; ++i_dim)
-            {
-               real_t tmp2 = shg_uT(i_dim,j_u)*w*dt;
-               for (int i_u = 0; i_u < dof_u; ++i_u)
-               {
-                  mat_wu(i_u + i_dim*dof_u, j_dof)
-                  += mu_eff*shg_u(i_u,j_dim)*tmp2 + tau_c*shg_u(i_u,i_dim)*tmp1;
-
-                 // Derivate of convective velocity
-                 // mat_wu(i_u + i_dim*dof_u, j_dof)
-                 // -= shg_u(i_u,j_dim)*(tmp11*dt+tmp22)*up(i_dim)*w*dt;
-
-               }
-            }
-         }
-      }
-
-      // Momentum - Pressure block (w,p)
-      for (int i_p = 0; i_p < dof_p; ++i_p)
-      {
-         real_t tmp1 = sh_p(i_p)*w;
-         for (int dim_u = 0; dim_u < dim; ++dim_u)
-         {
-            real_t tmp2 = shg_p(i_p,dim_u)*tau_m*w;
-            for (int j_u = 0; j_u < dof_u; ++j_u)
-            {
-               mat_wp(j_u + dof_u * dim_u, i_p)
-               += (tmp2*ushg_u(j_u) - shg_u(j_u,dim_u)*tmp1);
-            }
-         }
-      }
-
-      // Continuity - Velocity block (q,u)
-      for (int dim_u = 0; dim_u < dim; ++dim_u)
-      {
-         for (int j_u = 0; j_u < dof_u; ++j_u)
-         {
-            int j_dof = j_u + dof_u * dim_u;
-            real_t tmp1 = shg_u(j_u,dim_u)*w*dt;
-            real_t tmp2 = dupdu(j_u)*w;
-            for (int i_p = 0; i_p < dof_p; ++i_p)
-            {
-               mat_qu(i_p, j_dof)
-               += (-sh_p(i_p)*tmp1 + shg_p(i_p, dim_u)*tmp2);
-            }
-         }
-      }
+      // Diffusion term
+      AddMult_a_AAt(w*mu*dt, shg_u, mat_wu1);
 
       // Continuity - Pressure block (q,p)
       AddMult_a_AAt(-w*tau_m, shg_p, mat_qp);
-   }
 
-   for (int dim_u = 0; dim_u < dim; ++dim_u)
-   {
-      for (int j_u = 0; j_u < dof_u; ++j_u)
+      // Off diagional block terms
+      int ii = 0;
+      for (int i_dim = 0; i_dim < dim; ++i_dim)
       {
-         for (int i_u = 0; i_u < dof_u; ++i_u)
+         // Getting columns for outer product
+         shg_p.GetColumnReference(i_dim, vec_p);
+         shg_u.GetColumnReference(i_dim, vec_u1);
+
+         // Momentum + Continuity Galerkin terms
+         AddMult_a_VWt(-w, vec_u1, sh_p, mat_up[i_dim]);
+
+         // Momentum - Pressure block (w,p)
+         AddMult_a_VWt(tau_m * w, ushg_u, vec_p, mat_wp1[i_dim] );
+
+         // Continuity - Velocity block (q,u)
+         AddMult_a_VWt(w, vec_p, dupdu, mat_qu1[i_dim]);
+
+         // Momentum - Velocity block (w,u)
+         for (int j_dim = 0; j_dim < i_dim; ++j_dim)
          {
-            mat_wu(i_u + dim_u*dof_u, j_u + dim_u*dof_u) += mat_wu1(i_u, j_u);
+            shg_u.GetColumnReference(j_dim, vec_u2);
+            AddMult_a_VWt(w*dt*(mu+tau_c), vec_u1, vec_u2, mat_uu[ii++]);
          }
+         AddMult_a_VVt(w*dt*(mu+tau_c), vec_u1, mat_uu[ii++]);
       }
    }
 
+   // Adding sub elements
+   int ii = 0;
+   for (int i_dim = 0; i_dim < dim; ++i_dim)
+   {
+      mat_wp1[i_dim] += mat_up[i_dim];
+      mat_up[i_dim].Transpose();
+      mat_up[i_dim] *= dt;
+      mat_qu1[i_dim] += mat_up[i_dim];
+
+      mat_wp.AddSubMatrix(i_dim * dof_u, 0, mat_wp1[i_dim]);
+      mat_qu.AddSubMatrix(0, i_dim * dof_u, mat_qu1[i_dim]);
+      mat_wu.AddSubMatrix(i_dim*dof_u, mat_wu1);
+      for (int j_dim = 0; j_dim < i_dim; ++j_dim)
+      {
+         mat_wu.AddSubMatrix(i_dim * dof_u, j_dim * dof_u, mat_uu[ii]);
+         mat_uu[ii].Transpose();
+         mat_wu.AddSubMatrix(j_dim * dof_u, i_dim * dof_u, mat_uu[ii++]);
+      }
+      mat_wu.AddSubMatrix(i_dim * dof_u, i_dim * dof_u, mat_uu[ii++]);
+   }
 }
 
 // Assemble the outflow boundary residual vectors
@@ -685,7 +668,7 @@ void IncNavStoIntegrator
          }
       }
 
-      /* Jacobian due to the normal velocity
+      // Jacobian due to the normal velocity
       for (int dim_v = 0; dim_v < dim; ++dim_v)
       {
          real_t tmp0 = nor(dim_v)*w*dt;
@@ -701,8 +684,7 @@ void IncNavStoIntegrator
                }
             }
          }
-      }*/
-
+      }
    }
 }
 

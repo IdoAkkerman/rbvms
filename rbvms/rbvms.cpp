@@ -283,17 +283,19 @@ int main(int argc, char *argv[])
    Solver* pc_mom = nullptr;
    Solver* pc_cont= nullptr;
 
-   HypreILU* ilu_mom = new HypreILU();
+   HypreSmoother* hs_mom = new HypreSmoother();
    HypreILU* ilu_cont = new HypreILU();
 
-   pc_mom = ilu_mom;
+;
+
+   pc_mom = hs_mom;
    pc_cont = ilu_cont;
 
    jac_prec.SetPreconditioner(0, pc_mom);
    jac_prec.SetPreconditioner(1, pc_cont);
 
    // Set up the Jacobian solver
-   RBVMS::GeneralResidualMonitor j_monitor(MPI_COMM_WORLD,"\t\tFGMRES", 25);
+   RBVMS::GeneralResidualMonitor j_monitor(MPI_COMM_WORLD,"\t\tFGMRES", 10);
    FGMRESSolver j_gmres(MPI_COMM_WORLD);
    j_gmres.iterative_mode = false;
    j_gmres.SetRelTol(GMRES_RelTol);
