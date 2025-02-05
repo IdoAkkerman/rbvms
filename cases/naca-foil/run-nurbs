@@ -1,0 +1,12 @@
+#!/bin/bash
+gcc   -shared -o libfun.so -fPIC naca-foil.c
+
+exe=../../build/rbvms/rbvms
+mesh=naca-foil.mesh
+mesh=naca-cmesh.mesh
+rm output* log*
+
+mpirun -n 16 $exe -m $mesh -o 2 -r 0 \
+ --outflow-bdr 4 --weak-bdr 5 -l libfun.so \
+-s 21 -dt 0.02 --dt_vis 0.02 -tf 10 \
+-lt 1e-3 -ni 5  -ri 10  | tee log0

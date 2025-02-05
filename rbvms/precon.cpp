@@ -12,21 +12,36 @@ using namespace RBVMS;
 
 // Set the diagonal and off-diagonal operators
 void JacobianPreconditioner::SetOperator(const Operator &op)
-{
+{  
    BlockOperator *jacobian = (BlockOperator *) &op;
+   // Assign old preconditioner
+   if (is_operator_set){
+      for (int i = 0; i < prec.Size(); ++i)
+      {
+         
+         SetDiagonalBlock(i, prec[i]);
 
+         for (int j = i+1; j < prec.Size(); ++j)
+         {
+            SetBlock(j,i, const_cast<Operator*>(&jacobian->GetBlock(j,i)));
+         }
+      }
+
+      return;
+      }
+   // Assign New Preconditioner
    if (prec[0] == nullptr)
    {
       prec[0] = new HypreILU();//*Jpp);new HypreSmoother();//HypreILU()
    }
+   
    if (prec[1] == nullptr)
    {
       HypreParMatrix* Jpp = dynamic_cast<HypreParMatrix*>(&jacobian->GetBlock(1,1));
       HypreParMatrix *Jpp2 = const_cast<HypreParMatrix*>(Jpp);
-    //  prec[1] = new HypreSmoother();//*Jpp);
-      prec[1] = new HypreILU();//*Jpp);
+      HypreILU *ilu = new HypreILU();
+      prec[1] = ilu;//*Jpp);
    }
-
    for (int i = 0; i < prec.Size(); ++i)
    {
       prec[i]->SetOperator(jacobian->GetBlock(i,i));
@@ -37,6 +52,13 @@ void JacobianPreconditioner::SetOperator(const Operator &op)
          SetBlock(j,i, const_cast<Operator*>(&jacobian->GetBlock(j,i)));
       }
    }
+   // Remember the previous preconditioner to reuse it
+   is_operator_set = true;
+}
+// Set the flag to false to make a new preconditioner
+void JacobianPreconditioner::ResetOperatorSetup()
+{
+   is_operator_set = false;
 }
 
 // Destructor

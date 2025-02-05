@@ -1,0 +1,12 @@
+#!/bin/bash
+gcc   -shared -o libfun.so -fPIC lid-driven-cavity.c
+
+exe=../../build/rbvms/rbvms
+mesh=lid-driven-cavity.mesh
+
+rm output* log*
+
+mpirun -n 16 $exe -m $mesh -o 2 -r 4  \
+ --weak-bdr 1 -l libfun.so \
+-s 21 -dt 0.1 --dt_vis 1 -tf 10 \
+-lt 1e-3 -ni 20  -ri 10  | tee log0

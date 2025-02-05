@@ -12,7 +12,11 @@ install/*
 bin/*
 
 # Run directories
-examples/navsto_*
+cases/*/log*
+cases/*/output_*.dat
+cases/*/restart
+cases/*/solution
+cases/*/gprof*
 
 # Prerequisites
 *.d
