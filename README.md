@@ -77,13 +77,13 @@ the rbvms executable can be found in the `bin` directory.
 ### Delft Blue
 
 To run on Delf Blue please see,
-[DelftBlue.md](DelftBlue.md)
+[DelftBlue.md](config/DelftBlue.md)
 
 ### Reynolds
 
 TBD:
 To run on Reynolds please see,
-[Reynolds.md](Reynolds.md)
+[Reynolds.md](config/Reynolds.md)
 
 ## Test Cases
 
