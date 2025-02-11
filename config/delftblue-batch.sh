@@ -10,7 +10,7 @@
 DIR=$HOME/rbvms
 EXE=$DIR/build/bin/rbvms
 
-source $DIR/config/delft-blue-modules.sh
+source $DIR/config/delftblue-modules.sh
 
 srun $EXE \
 --mesh von-karman-nurbs.mesh --order 2 --refine 4 \
