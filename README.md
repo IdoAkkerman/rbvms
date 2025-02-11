@@ -27,7 +27,7 @@ https://doi.org/10.1016/j.jcp.2010.01.008.
 The parallel application is build on [mfem](https://github.com/mfem/mfem), a
 lightweight, general, scalable C++ library for finite element methods.
 
-## Install
+## Install -- Local
 
 To install RBVMS on a Ubuntu-based machine make sure the appropriate packages are installed.
 
@@ -72,9 +72,21 @@ Depending on the machine compilation might take a few minutes.
 After this hypre and MFEM will be installed in the `build/external` directory, and
 the rbvms executable can be found in the `bin` directory.
 
-## Cases
+## Install -- Clusters
 
-Several test cases are included with rbvms.
+### Delft Blue
+
+To run on Delf Blue please see,
+[DelftBlue.md](DelftBlue.md)
+
+### Reynolds
+
+TBD:
+To run on Reynolds please see,
+[Reynolds.md](Reynolds.md)
+
+## Test Cases
+
 
 2D test cases:
 1. Poiseuille flow: go to directory `cases/poiseuille`
