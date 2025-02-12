@@ -4,7 +4,12 @@ Geometry.OldNewReg=0; //makes numbering continious
 
 //************************Things to adapt*******************************************************
 //Import the Ventofoils
-Include "2D-VentoFoil.geo";
+Include "ventofoil-2D.geo";
+
+
+
+
+
 
 foilamount=1; //insert number of foils (must be matching the amount in Ventofoil.txt)
 
@@ -19,9 +24,6 @@ dxb=32; //(dx) length of box
 dyb=12; //(dy) width of box
 angle=0*Pi; //rotation angle of domain in rad (positive anticlockwise)
 //************************End Adapting***********************************************************
-
-
-
 
 //Domain definition -------------------------------------------------
 //corner points of domain
@@ -61,10 +63,12 @@ Physical Line(10)={8,9,11,12}; //no slip at foil
 Physical Line(11)={7};  // suction
 Physical Line(12)={10}; // blowing
 
-Physical Surface(100) = {s900}; //domain with foil cut out
+Physical Surface(100) = {s900}; //domain with foil cut out
+
 //Mesh.MeshSizeFactor = 0.1;
 Mesh.Smoothing = 100;
-
+
+
 // Mesh
 //Field[1] = MathEval;
 //Field[1].F = "(0.1 + ((7-0.2*x)/64)*y*y) + (1.3-tanh(0.1*(x+8))+0.02*x)";

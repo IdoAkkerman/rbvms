@@ -20,7 +20,7 @@ SetFactory("OpenCASCADE"); //makes translation and rotation possible
 Geometry.OCCTargetUnit='M';
 // Import file ----------------------------------------------
 //***************Things to adapt ***************
-Merge "VentoFoil-2D.stp"; //change here the filename
+Merge "ventofoil-2D.stp"; //change here the filename
 foilamount =1; //input here the number of Foils (right now max. 6, include more translate-rotate-lines and coordinates if more foils)
 
 //Translation and Rotation of 1st VentoFoil
