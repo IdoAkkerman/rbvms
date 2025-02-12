@@ -28,6 +28,7 @@ private:
    Coefficient &c_mu;
    VectorCoefficient &c_force;
    VectorCoefficient &c_sol;
+   Coefficient &c_suction;
 
    /// Numerical parameters
    real_t dt = -1.0;
@@ -64,7 +65,8 @@ public:
    /// Constructor
    IncNavStoIntegrator(Coefficient &mu_,
                        VectorCoefficient &force_,
-                       VectorCoefficient &sol_);
+                       VectorCoefficient &sol_,
+                       Coefficient &suction_);
 
    /// Set the timestep size @a dt_
    void SetTimeAndStep(const real_t &t, const real_t &dt_)

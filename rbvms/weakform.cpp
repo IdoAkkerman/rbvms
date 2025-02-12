@@ -13,8 +13,9 @@ using namespace RBVMS;
 // Constructor
 IncNavStoIntegrator::IncNavStoIntegrator(Coefficient &mu,
                                          VectorCoefficient &force,
-                                         VectorCoefficient &sol)
-   : c_mu(mu), c_force(force), c_sol(sol)
+                                         VectorCoefficient &sol,
+                                         Coefficient &suction)
+   : c_mu(mu), c_force(force), c_sol(sol), c_suction(suction)
 {
    dim = force.GetVDim();
    u.SetSize(dim);
@@ -576,7 +577,7 @@ void IncNavStoIntegrator
    elv_u.UseExternalData(elvec[0]->GetData(), dof_u, dim);
 
    sh_u.SetSize(dof_u);
-
+   Vector traction(dim);
    int intorder = 2*el1[0]->GetOrder();
    const IntegrationRule &ir = IntRules.Get(Tr.GetGeometryType(), intorder);
    for (int i = 0; i < ir.GetNPoints(); i++)
@@ -588,6 +589,7 @@ void IncNavStoIntegrator
 
       // Access the neighboring element's integration point
       const IntegrationPoint &eip = Tr.GetElement1IntPoint();
+      real_t suction = c_suction.Eval(*Tr.Elem1, eip);
 
       CalcOrtho(Tr.Jacobian(), nor); // nor = n.da
       real_t w = ip.weight;          // No weight --> taken care of by nor
@@ -595,6 +597,9 @@ void IncNavStoIntegrator
       el1[0]->CalcPhysShape(*Tr.Elem1, sh_u);
       elf_u.MultTranspose(sh_u, u);
       elf_du.MultTranspose(sh_u, dudt);
+
+      traction.Set(suction,nor);
+      AddMult_a_VWt(w, sh_u, traction, elv_u);
 
       real_t un = u*nor;
       if (un < 0.0) continue;

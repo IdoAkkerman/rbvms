@@ -322,9 +322,10 @@ int main(int argc, char *argv[])
    LibVectorCoefficient sol(dim, lib_file, "sol_u");
    LibCoefficient mu(lib_file, "mu", false, mu_param);
    LibVectorCoefficient force(dim, lib_file, "force");
+   LibCoefficient suction(lib_file, "suction", false, 0.0);
 
    // Define weak form and evolution
-   RBVMS::IncNavStoIntegrator integrator(mu, force, sol);
+   RBVMS::IncNavStoIntegrator integrator(mu, force, sol, suction);
    RBVMS::ParTimeDepBlockNonlinForm form(spaces, integrator);
    RBVMS::Evolution evo(form, newton_solver);
    ode_solver->Init(evo);
