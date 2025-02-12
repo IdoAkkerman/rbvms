@@ -1,0 +1,17 @@
+gcc   -shared -o foil.so -fPIC foil.c
+
+exe=../../build/rbvms/rbvms
+mesh=foil-in-domain.msh
+
+if [ -f $mesh ]; then
+   echo " $mesh exists."
+else
+   gmsh foil-in-domain.geo  -2 -format msh22 -clscale 0.04
+fi
+
+rm output* log*
+
+mpirun -n 16 $exe -m $mesh -o 1  -r 0 \
+--strong-bdr "1 2" --outflow-bdr "3"  --weak-bdr "10 11 12" -l foil.so \
+-s 45 -dt 0.05 --dt_vis 0.1 -tf 1000 \
+-lt 1e-3 -ni 20  -ri 10 | tee log0
