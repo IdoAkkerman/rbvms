@@ -14,8 +14,10 @@ using namespace RBVMS;
 IncNavStoIntegrator::IncNavStoIntegrator(Coefficient &mu,
                                          VectorCoefficient &force,
                                          VectorCoefficient &sol,
-                                         Coefficient &suction)
-   : c_mu(mu), c_force(force), c_sol(sol), c_suction(suction)
+                                         Coefficient &suction,
+                                         Coefficient &blowing)
+   : c_mu(mu), c_force(force), c_sol(sol),
+     c_suction(suction), c_blowing(blowing)
 {
    dim = force.GetVDim();
    u.SetSize(dim);
@@ -561,7 +563,9 @@ void IncNavStoIntegrator
                         FaceElementTransformations &Tr,
                         const Array<const Vector *> &elsol,
                         const Array<const Vector *> &elrate,
-                        const Array<Vector *> &elvec)
+                        const Array<Vector *> &elvec,
+                        real_t &outflow,
+                        bool suction)
 {
    int dof_u = el1[0]->GetDof();
    int dof_p = el1[1]->GetDof();
@@ -571,6 +575,7 @@ void IncNavStoIntegrator
 
    *elvec[0] = 0.0;
    *elvec[1] = 0.0;
+   outflow = 0.0;
 
    elf_u.UseExternalData(elsol[0]->GetData(), dof_u, dim);
    elf_du.UseExternalData(elrate[0]->GetData(), dof_u, dim);
@@ -589,7 +594,6 @@ void IncNavStoIntegrator
 
       // Access the neighboring element's integration point
       const IntegrationPoint &eip = Tr.GetElement1IntPoint();
-      real_t suction = c_suction.Eval(*Tr.Elem1, eip);
 
       CalcOrtho(Tr.Jacobian(), nor); // nor = n.da
       real_t w = ip.weight;          // No weight --> taken care of by nor
@@ -598,10 +602,15 @@ void IncNavStoIntegrator
       elf_u.MultTranspose(sh_u, u);
       elf_du.MultTranspose(sh_u, dudt);
 
-      traction.Set(suction,nor);
-      AddMult_a_VWt(w, sh_u, traction, elv_u);
-
       real_t un = u*nor;
+      if (suction)
+      {
+         real_t suction_val = c_suction.Eval(*Tr.Elem1, eip);
+         traction.Set(suction_val,nor);
+         AddMult_a_VWt(w, sh_u, traction, elv_u);
+         outflow += un * w; // No weight --> taken care of by nor
+      }
+
       if (un < 0.0) continue;
 
       AddMult_a_VWt(w*un, sh_u, u, elv_u);
@@ -615,7 +624,8 @@ void IncNavStoIntegrator
                       FaceElementTransformations &Tr,
                       const Array<const Vector *> &elsol,
                       const Array<const Vector *> &elrate,
-                      const Array2D<DenseMatrix *> &elmats)
+                      const Array2D<DenseMatrix *> &elmats,
+                      bool suction)
 {
    int dof_u = el1[0]->GetDof();
    int dof_p = el1[1]->GetDof();
@@ -700,7 +710,8 @@ void IncNavStoIntegrator
                           FaceElementTransformations &Tr,
                           const Array<const Vector *> &elsol,
                           const Array<const Vector *> &elrate,
-                          const Array<Vector *> &elvec)
+                          const Array<Vector *> &elvec,
+                          bool blowing)
 {
    int dof_u = el1[0]->GetDof();
    int dof_p = el1[1]->GetDof();
@@ -733,10 +744,15 @@ void IncNavStoIntegrator
       real_t mu = c_mu.Eval(*Tr.Elem1, eip);
       c_sol.Eval(up, *Tr.Elem1, eip);
 
+      real_t w = ip.weight * Tr.Weight();
       CalcOrtho(Tr.Jacobian(), nor);
       nor /= nor.Norml2();
 
-      real_t w = ip.weight * Tr.Weight();
+      if (blowing)
+      {
+         real_t blowing_val = c_blowing.Eval(*Tr.Elem1, eip);
+         up.Add(-blowing_val, nor);
+      }
 
       el1[0]->CalcPhysShape(*Tr.Elem1, sh_u);
       elf_u.MultTranspose(sh_u, u);
@@ -776,7 +792,7 @@ void IncNavStoIntegrator
       un = u*nor;
       if (un < 0.0) continue;
 
-      AddMult_a_VWt(w*un, sh_u, u, elv_u);
+      AddMult_a_VWt(w*un, sh_u, up, elv_u);
    }
 }
 
@@ -788,7 +804,8 @@ void IncNavStoIntegrator
                         FaceElementTransformations &Tr,
                         const Array<const Vector *> &elsol,
                         const Array<const Vector *> &elrate,
-                        const Array2D<DenseMatrix *> &elmats)
+                        const Array2D<DenseMatrix *> &elmats,
+                        bool blowing)
 {
    int dof_u = el1[0]->GetDof();
    int dof_p = el1[1]->GetDof();

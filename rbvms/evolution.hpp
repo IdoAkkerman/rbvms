@@ -46,6 +46,9 @@ public:
    /// Get the CFL Number
    real_t GetCFL() const;
 
+   /// Get the Outflow
+   real_t GetOutflow() const;
+
    /// Get the Force on each of the boundaries
    DenseMatrix GetForce();
 
@@ -67,11 +70,13 @@ private:
 
    /// Numerical parameters
    real_t dt;
-   mutable real_t cfl;
+   mutable real_t cfl, outflow;
 
    Array<int> strongBCBdr;
    Array<int> weakBCBdr;
    Array<int> outflowBdr;
+   Array<int> suctionBdr;
+   Array<int> blowingBdr;
 
    /// Solution & Residual vector
    mutable Vector xs0;
@@ -90,6 +95,8 @@ public:
    void SetStrongBC (Array<int> strong_bdr);
    void SetWeakBC   (Array<int> weak_bdr);
    void SetOutflowBC(Array<int> outflow_bdr);
+   void SetSuctionBC(Array<int> suction_bdr);
+   void SetBlowingBC(Array<int> blowing_bdr);
 
    /// Set the solution of the previous time step @a x0
    /// and the timestep size @a dt of the current solve.
@@ -101,6 +108,9 @@ public:
 
    /// Get the CFL-Number
    real_t GetCFL() { return cfl;};
+
+   /// Get the Outflow
+   real_t GetOutflow() { return outflow;};
 
    /// Get the conservative boundary forces
    DenseMatrix& GetForce() { return bdrForce;};

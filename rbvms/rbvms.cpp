@@ -78,6 +78,8 @@ int main(int argc, char *argv[])
    Array<int> strong_bdr;
    Array<int> weak_bdr;
    Array<int> outflow_bdr;
+   Array<int> suction_bdr;
+   Array<int> blowing_bdr;
    Array<int> master_bdr;
    Array<int> slave_bdr;
 
@@ -90,6 +92,10 @@ int main(int argc, char *argv[])
                   "Boundaries where Dirichelet BCs are enforced weakly.");
    args.AddOption(&outflow_bdr, "-out", "--outflow-bdr",
                   "Outflow boundaries.");
+   args.AddOption(&suction_bdr, "-suc", "--suction-bdr",
+                  "Suction boundaries.");
+   args.AddOption(&blowing_bdr, "-blow", "--blowing-bdr",
+                  "Blowing boundaries.");
    args.AddOption(&master_bdr, "-mbc", "--master-bdr",
                   "Periodic master boundaries.");
    args.AddOption(&slave_bdr, "-sbc", "--slave-bdr",
@@ -196,6 +202,8 @@ int main(int argc, char *argv[])
       if (strong_bdr.Size()>0) {cout<<"Strong  = "; strong_bdr.Print();}
       if (weak_bdr.Size()>0) {cout<<"Weak    = "; weak_bdr.Print();}
       if (outflow_bdr.Size()>0){ cout<<"Outflow = "; outflow_bdr.Print() ;}
+      if (suction_bdr.Size()>0){ cout<<"Suction = "; suction_bdr.Print() ;}
+      if (blowing_bdr.Size()>0){ cout<<"Blowing = "; blowing_bdr.Print() ;}
       if (master_bdr.Size()>0) {cout<<"Periodic (master) = "; master_bdr.Print();}
       if (slave_bdr.Size()>0) {cout<<"Periodic (slave)  = "; slave_bdr.Print();}
    }
@@ -209,6 +217,8 @@ int main(int argc, char *argv[])
    CheckBoundaries(bnd_flag, strong_bdr);
    CheckBoundaries(bnd_flag, weak_bdr);
    CheckBoundaries(bnd_flag, outflow_bdr);
+   CheckBoundaries(bnd_flag, suction_bdr);
+   CheckBoundaries(bnd_flag, blowing_bdr);
    CheckBoundaries(bnd_flag, master_bdr);
    CheckBoundaries(bnd_flag, slave_bdr);
 
@@ -286,8 +296,6 @@ int main(int argc, char *argv[])
    HypreSmoother* hs_mom = new HypreSmoother();
    HypreILU* ilu_cont = new HypreILU();
 
-;
-
    pc_mom = hs_mom;
    pc_cont = ilu_cont;
 
@@ -323,9 +331,10 @@ int main(int argc, char *argv[])
    LibCoefficient mu(lib_file, "mu", false, mu_param);
    LibVectorCoefficient force(dim, lib_file, "force");
    LibCoefficient suction(lib_file, "suction", false, 0.0);
+   LibCoefficient blowing(lib_file, "blowing", false, 0.0);
 
    // Define weak form and evolution
-   RBVMS::IncNavStoIntegrator integrator(mu, force, sol, suction);
+   RBVMS::IncNavStoIntegrator integrator(mu, force, sol, suction, blowing);
    RBVMS::ParTimeDepBlockNonlinForm form(spaces, integrator);
    RBVMS::Evolution evo(form, newton_solver);
    ode_solver->Init(evo);
@@ -334,6 +343,8 @@ int main(int argc, char *argv[])
    form.SetStrongBC (strong_bdr);
    form.SetWeakBC   (weak_bdr);
    form.SetOutflowBC(outflow_bdr);
+   form.SetSuctionBC(suction_bdr);
+   form.SetBlowingBC(blowing_bdr);
 
    // 6. Define the solution vector, grid function and output
    BlockVector xp(bOffsets);
@@ -444,6 +455,24 @@ int main(int argc, char *argv[])
       std::ostringstream filename;
       filename << "output_"<<std::setw(6)<<setfill('0')<<si<< ".dat";
       os.open(filename.str().c_str());
+
+      // Header
+      char dimName[] = "xyz";
+      int i = 6;
+      os <<"# 1: step"<<"\t"<<"2: time"<<"\t"<<"3: dt"<<"\t"
+         <<"4: cfl"<<"\t"<<"5: outflow"<<"\t";
+
+      for (int b=0; b<pmesh.bdr_attributes.Size(); ++b)
+      {
+         int bnd = pmesh.bdr_attributes[b];
+         for (int v=0; v<dim; ++v)
+         {
+            std::ostringstream forcename;
+            forcename <<i++<<": F"<<dimName[v]<<"_"<<bnd;
+            os<<forcename.str()<<"\t";
+         }
+      }
+      os<<endl;
    }
 
    // Loop till final time reached
@@ -453,34 +482,42 @@ int main(int argc, char *argv[])
       if (Mpi::Root())
       {
          line(80);
-         cout<<std::defaultfloat<<std::setprecision(4)<<std::setw(10);
-         cout<<" step = " << si << " : dt = " << dt << endl;
+         cout<<std::defaultfloat<<std::setprecision(4);
+         cout<<" step = " << si << endl;
+         cout<<"   dt = " << dt << endl;
+         cout<<std::defaultfloat<<std::setprecision(6);;
          cout<<" time = [" << t << ", " << t+dt <<"]"<< endl;
+         cout<<std::defaultfloat<<std::setprecision(4);
          line(80);
       }
 
       // Actual time step
       xp0 = xp;
+
       ode_solver->Step(xp, t, dt);
       si++;
 
       // Postprocess solution
       real_t cfl = evo.GetCFL();
+      real_t outflow = evo.GetOutflow();
       DenseMatrix bdrForce = evo.GetForce();
       if (Mpi::Root())
       {
          // Print to file
-         int nbdr = bdrForce.Height();
+         int nbdr = pmesh.bdr_attributes.Size();
          os << std::setw(10);
-         os << si<<"\t"<<t<<"\t"<<dt<<"\t"<<cfl<<"\t";
+         os << si<<"\t"<<t<<"\t"<<dt<<"\t"<<cfl<<"\t"<<outflow<<"\t";
          for (int b=0; b<nbdr; ++b)
+         {
+            int bnd = pmesh.bdr_attributes[b];
             for (int v=0; v<dim; ++v)
             {
-               os<<bdrForce(b,v)<<"\t";
+               os<<bdrForce(bnd-1,v)<<"\t";
             }
+         }
          os<<"\n"<< std::flush;
 
-         // Print force to screen in table
+         // Print line lambda function
          auto pline = [](int len)
          {
             cout<<" +";
@@ -494,7 +531,7 @@ int main(int argc, char *argv[])
          cout<<" | Boundary | ";
          for (int b=0; b<nbdr; ++b)
          {
-            cout<<std::setw(10)<<b+1<<" | ";
+            cout<<std::setw(10)<<pmesh.bdr_attributes[b]<<" | ";
          }
          cout<<"\n";
          pline(10+13*nbdr);
@@ -506,8 +543,9 @@ int main(int argc, char *argv[])
             cout<<" | Force "<<dimName[v]<<"  | ";
             for (int b=0; b<nbdr; ++b)
             {
+               int bnd = pmesh.bdr_attributes[b];
                cout<<std::defaultfloat<<std::setprecision(4)<<std::setw(10);
-               cout<<bdrForce(b,v)<<" | ";
+               cout<<bdrForce(bnd-1,v)<<" | ";
             }
             cout<<"\n";
          }
@@ -557,6 +595,7 @@ int main(int argc, char *argv[])
       if (Mpi::Root())
       {
          line(80);
+         cout<<" outflow = "<<outflow<<endl;
          cout<<" cfl = "<<cfl<<endl;
          cout<<" dt  = "<<dt0<<" --> "<<dt<<endl;
          line(80);

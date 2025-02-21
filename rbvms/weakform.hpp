@@ -29,6 +29,7 @@ private:
    VectorCoefficient &c_force;
    VectorCoefficient &c_sol;
    Coefficient &c_suction;
+   Coefficient &c_blowing;
 
    /// Numerical parameters
    real_t dt = -1.0;
@@ -66,7 +67,8 @@ public:
    IncNavStoIntegrator(Coefficient &mu_,
                        VectorCoefficient &force_,
                        VectorCoefficient &sol_,
-                       Coefficient &suction_);
+                       Coefficient &suction_,
+                       Coefficient &blowing_);
 
    /// Set the timestep size @a dt_
    void SetTimeAndStep(const real_t &t, const real_t &dt_)
@@ -75,6 +77,8 @@ public:
       c_mu.SetTime(t);
       c_force.SetTime(t);
       c_sol.SetTime(t);
+      c_suction.SetTime(t);
+      c_blowing.SetTime(t);
    };
 
    /// Assemble the local energy
@@ -110,7 +114,9 @@ public:
                               FaceElementTransformations &Tr,
                               const Array<const Vector *> &elfun,
                               const Array<const Vector *> &elrate,
-                              const Array<Vector *> &elvect);
+                              const Array<Vector *> &elvect,
+                              real_t &outflow,
+                              bool suction = false);
 
    /// Assemble the outflow boundary gradient matrices
    void AssembleOutflowGrad(const Array<const FiniteElement *>&el1,
@@ -118,7 +124,8 @@ public:
                             FaceElementTransformations &Tr,
                             const Array<const Vector *> &elfun,
                             const Array<const Vector *> &elrate,
-                            const Array2D<DenseMatrix *> &elmats);
+                            const Array2D<DenseMatrix *> &elmats,
+                            bool suction = false);
 
 
    /// Assemble the weak Dirichlet BC boundary residual vectors
@@ -127,7 +134,8 @@ public:
                                 FaceElementTransformations &Tr,
                                 const Array<const Vector *> &elfun,
                                 const Array<const Vector *> &elrate,
-                                const Array<Vector *> &elvect);
+                                const Array<Vector *> &elvect,
+                                bool blowing = false);
 
    /// Assemble the weak Dirichlet BC boundary gradient matrices
    void AssembleWeakDirBCGrad(const Array<const FiniteElement *>&el1,
@@ -135,7 +143,8 @@ public:
                               FaceElementTransformations &Tr,
                               const Array<const Vector *> &elfun,
                               const Array<const Vector *> &elrate,
-                              const Array2D<DenseMatrix *> &elmats);
+                              const Array2D<DenseMatrix *> &elmats,
+                              bool blowing = false);
 };
 
 } // namespace RBVMS

@@ -27,6 +27,7 @@ void Evolution::ImplicitSolve(const real_t dt,
    form.ResetGradient();
    form.SetTimeAndSolution(t, dt, u0);
    Vector zero;
+   dudt = 0.0;
    solver.Mult(zero, dudt);
    dudt_ = dudt;
    if (Mpi::Root())
@@ -40,6 +41,12 @@ void Evolution::ImplicitSolve(const real_t dt,
 real_t Evolution::GetCFL() const
 {
    return form.GetCFL();
+}
+
+// Get the CFL number from the formulation
+real_t Evolution::GetOutflow() const
+{
+   return form.GetOutflow();
 }
 
 // Get the boundary forces from the formulation
@@ -95,6 +102,18 @@ void ParTimeDepBlockNonlinForm::SetWeakBC   (Array<int> weak_bdr)
 void ParTimeDepBlockNonlinForm::SetOutflowBC(Array<int> outflow_bdr)
 {
    outflow_bdr.Copy(outflowBdr);
+}
+
+// Set the suction boundaries
+void ParTimeDepBlockNonlinForm::SetSuctionBC(Array<int> suction_bdr)
+{
+   suction_bdr.Copy(suctionBdr);
+}
+
+// Set the blowing boundaries
+void ParTimeDepBlockNonlinForm::SetBlowingBC(Array<int> blowing_bdr)
+{
+   blowing_bdr.Copy(blowingBdr);
 }
 
 // Set the solution of the previous time step
@@ -155,6 +174,10 @@ void ParTimeDepBlockNonlinForm::Mult(const Vector &dx, Vector &y) const
    real_t tmp = cfl;
    MPI_Allreduce(&tmp, &cfl, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
+   // Comminucate outflow
+   tmp = outflow;
+   MPI_Allreduce(&tmp, &outflow, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
    // Comminucate boundary force
    DenseMatrix tmpDM(bdrForce);
    MPI_Allreduce(tmpDM.GetData(), bdrForce.GetData(),
@@ -205,6 +228,7 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
          fe[s] = fes[s]->GetFE(i);
          bx.GetBlock(s).GetSubVector(*(vdofs[s]), *el_x[s]);
          bdx.GetBlock(s).GetSubVector(*(vdofs[s]), *el_dx[s]);
+
          if (doftrans[s])
          {
             MFEM_WARNING("ParTimeDepBlockNonlinForm::Doftrans");
@@ -228,16 +252,23 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
    }
 
    // Domain boundary Outflow
+   real_t el_outflow;
+   outflow = 0.0;
    for (int i = 0; i < mesh->GetNBE(); ++i)
    {
       // Determine if boundary is outflow
       const int bdr_attr = mesh->GetBdrAttribute(i);
-      bool outflow = false;
+      bool outflowBC = false;
+      bool suctionBC = false;
       for (int b=0; b<outflowBdr.Size(); ++b)
       {
-        if ( bdr_attr == outflowBdr[b]) { outflow = true; }
+        if ( bdr_attr == outflowBdr[b]) { outflowBC = true; }
       }
-      if ( !outflow ) { continue; }
+      for (int b=0; b<suctionBdr.Size(); ++b)
+      {
+        if ( bdr_attr == suctionBdr[b]) { suctionBC= true; }
+      }
+      if ( !outflowBC && !suctionBC ) { continue; }
 
       // Perform assembly over outflow
       Tr = mesh->GetBdrFaceTransformations(i);
@@ -260,7 +291,9 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
          }
 
          integrator.AssembleOutflowVector(fe, fe2, *Tr,
-                                          el_x_const, el_dx_const, el_y);
+                                          el_x_const, el_dx_const, el_y,
+                                          el_outflow, suctionBC);
+         outflow += el_outflow;
          for (int s=0; s<fes.Size(); ++s)
          {
             if (el_y[s]->Size() == 0) { continue; }
@@ -295,11 +328,16 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
       // Determine if boundary is outflow
       const int bdr_attr = mesh->GetBdrAttribute(i);
       bool weakBC = false;
+      bool blowingBC = false;
       for (int b=0; b<weakBCBdr.Size(); ++b)
       {
          if ( bdr_attr == weakBCBdr[b]) { weakBC = true; }
       }
-      if ( !weakBC ) { continue; }
+      for (int b=0; b<blowingBdr.Size(); ++b)
+      {
+         if ( bdr_attr == blowingBdr[b]) { blowingBC = true; }
+      }
+      if ( !weakBC && !blowingBC ) { continue; }
 
       // Perform assembly over Dirichlet boundary
       Tr = mesh->GetBdrFaceTransformations(i);
@@ -322,7 +360,9 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
          }
 
          integrator.AssembleWeakDirBCVector(fe, fe2, *Tr,
-                                            el_x_const, el_dx_const, el_y);
+                                            el_x_const, el_dx_const, el_y,
+                                            blowingBC);
+
          for (int s=0; s<fes.Size(); ++s)
          {
             if (el_y[s]->Size() == 0) { continue; }
@@ -536,12 +576,18 @@ void ParTimeDepBlockNonlinForm
    {
       // Determine if boundary is outflow
       const int bdr_attr = mesh->GetBdrAttribute(i);
-      bool outflow = false;
+      bool outflowBC = false;
+      bool suctionBC = false;
       for (int b=0; b<outflowBdr.Size(); ++b)
       {
-        if ( bdr_attr == outflowBdr[b]) { outflow = true; }
+        if ( bdr_attr == outflowBdr[b]) { outflowBC = true; }
       }
-      if ( !outflow ) { continue; }
+      for (int b=0; b<suctionBdr.Size(); ++b)
+      {
+        if ( bdr_attr == suctionBdr[b]) { suctionBC = true; }
+      }
+
+      if ( !outflowBC && !suctionBC ) { continue; }
 
       Tr = mesh->GetBdrFaceTransformations(i);
       if (Tr != NULL)
@@ -565,7 +611,9 @@ void ParTimeDepBlockNonlinForm
          }
 
          integrator.AssembleOutflowGrad(fe, fe2, *Tr,
-                                        el_x_const, el_dx_const, elmats);
+                                        el_x_const, el_dx_const, elmats,
+                                        suctionBC);
+
          for (int l=0; l<fes.Size(); ++l)
          {
             for (int j=0; j<fes.Size(); ++j)
@@ -589,11 +637,16 @@ void ParTimeDepBlockNonlinForm
       // Determine if boundary is outflow
       const int bdr_attr = mesh->GetBdrAttribute(i);
       bool weakBC = false;
+      bool blowingBC = false;
       for (int b=0; b<weakBCBdr.Size(); ++b)
       {
          if ( bdr_attr == weakBCBdr[b]) { weakBC = true; }
       }
-      if ( !weakBC ) { continue; }
+      for (int b=0; b<blowingBdr.Size(); ++b)
+      {
+         if ( bdr_attr == blowingBdr[b]) { blowingBC = true; }
+      }
+      if ( !weakBC && !blowingBC ) { continue; }
 
       Tr = mesh->GetBdrFaceTransformations(i);
       if (Tr != NULL)
@@ -615,7 +668,9 @@ void ParTimeDepBlockNonlinForm
          }
 
          integrator.AssembleWeakDirBCGrad(fe, fe2, *Tr,
-                                          el_x_const, el_dx_const, elmats);
+                                          el_x_const, el_dx_const, elmats,
+                                          blowingBC);
+
          for (int l=0; l<fes.Size(); ++l)
          {
             for (int j=0; j<fes.Size(); ++j)
