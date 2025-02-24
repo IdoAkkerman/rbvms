@@ -228,7 +228,6 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
          fe[s] = fes[s]->GetFE(i);
          bx.GetBlock(s).GetSubVector(*(vdofs[s]), *el_x[s]);
          bdx.GetBlock(s).GetSubVector(*(vdofs[s]), *el_dx[s]);
-
          if (doftrans[s])
          {
             MFEM_WARNING("ParTimeDepBlockNonlinForm::Doftrans");

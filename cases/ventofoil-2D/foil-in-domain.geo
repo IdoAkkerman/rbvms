@@ -81,7 +81,7 @@ Field[1].CurvesList = {7,8,9,10,11,12};
 
 Field[2] = Threshold;
 Field[2].InField = 1;
-Field[2].SizeMin = lcb / 30;
+Field[2].SizeMin = lcb / 60;
 Field[2].SizeMax = lcb / 3;
 Field[2].DistMin = 0.1;
 Field[2].DistMax = 1.0;
@@ -89,7 +89,7 @@ Field[2].DistMax = 1.0;
 
 //rp1 = newp; Point(rp1)={2.5,1.4,0,lcb};
 rp1 = newp; Point(rp1)={0,0,0,lcb};
-rp2 = newp; Point(rp2)={11,6,0,lcb};
+rp2 = newp; Point(rp2)={5.5,3,0,lcb};
 rl=newl; Line(rl)={rp1,rp2};
 
 Field[3] = Distance;
