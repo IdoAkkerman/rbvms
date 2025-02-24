@@ -58,7 +58,7 @@ double suction(double *coord, int dim, double time)
 // Blowing velocity
 double blowing(double *coord, int dim, double time)
 {
-   return 1.0*fmin(1.0, 1e-3*exp(4.0*time/1.0));   ////1.978*fmin(1.0, 1e-3*exp(2.0*time/1.0));
+   return 1.978*fmin(1.0, 1e-3*exp(4.0*time/1.0));
 }
 
 double mu(double *coord, int dim, double time)
