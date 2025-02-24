@@ -14,8 +14,9 @@ rm log*
 mpirun -n 16 $exe -m $mesh -o 1  -r 0 \
 --strong-bdr "1 2" \
 --outflow-bdr "3" \
---weak-bdr "10 12" \
+--weak-bdr "10" \
 --suction-bdr "11" \
+--blowing-bdr "12" \
 -l foil.so \
 -s 45 -dt 0.0025 --dt_vis 0.1 -tf 1000 \
 --cfl-target 2.5 \
