@@ -9,7 +9,7 @@ else
    gmsh foil-in-domain.geo  -2 -format msh22 -clscale 0.04
 fi
 
-rm log*
+##rm log*
 
 mpirun -n 16 $exe -m $mesh -o 1  -r 0 \
 --strong-bdr "1 2" \
@@ -18,7 +18,7 @@ mpirun -n 16 $exe -m $mesh -o 1  -r 0 \
 --suction-bdr "11" \
 --blowing-bdr "12" \
 -l foil.so \
--s 45 -dt 0.0025 --dt_vis 0.1 -tf 1000 \
+-s 45 -dt 0.0001 --dt_vis 0.1 -tf 1000 \
 --cfl-target 2.5 \
 --dt-gain 0.75 \
--lt 1e-3 -ni 20 -ri 10 --restart | tee log0
+-lt 1e-3 -ni 20 -ri 10 --restart | tee log1
