@@ -25,6 +25,7 @@ class IncNavStoIntegrator
 private:
 
    // Physical parameters
+   Coefficient &c_rho;
    Coefficient &c_mu;
    VectorCoefficient &c_force;
    VectorCoefficient &c_sol;
@@ -53,7 +54,7 @@ private:
 
    /// Compute RBVMS stabilisation parameters
    void GetTau(real_t &tau_m, real_t &tau_c, real_t &cfl2,
-               real_t &mu, Vector &u,
+               real_t &rho, real_t &mu, Vector &u,
                ElementTransformation &Tr);
 
    /// Compute Weak Dirichlet stabilisation parameters
@@ -64,7 +65,8 @@ private:
 
 public:
    /// Constructor
-   IncNavStoIntegrator(Coefficient &mu_,
+   IncNavStoIntegrator(Coefficient &rho_,
+                       Coefficient &mu_,
                        VectorCoefficient &force_,
                        VectorCoefficient &sol_,
                        Coefficient &suction_,

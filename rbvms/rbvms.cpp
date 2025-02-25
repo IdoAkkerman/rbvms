@@ -83,8 +83,9 @@ int main(int argc, char *argv[])
    Array<int> master_bdr;
    Array<int> slave_bdr;
 
-   real_t mu_param = 1.0;
    const char *lib_file = "libfun.so";
+   real_t rho_param = 1.204;
+   real_t mu_param = 1.825e-5;
 
    args.AddOption(&strong_bdr, "-sbc", "--strong-bdr",
                   "Boundaries where Dirichelet BCs are enforced strongly.");
@@ -106,8 +107,10 @@ int main(int argc, char *argv[])
                   " - Boundary condition\n\t"
                   " - Forcing\n\t"
                   " - Diffusion\n\t");
-   args.AddOption(&mu_param, "-m", "--mu",
-                  "Sets the diffusion parameters, should be positive.");
+   args.AddOption(&mu_param, "-mu", "--dyn-visc",
+                  "Sets the dynamic diffusion parameters, should be positive.");
+   args.AddOption(&rho_param, "-rho", "--density",
+                  "Sets the density parameters, should be positive.");
 
    // Time stepping params
    int ode_solver_type = 35;
@@ -327,14 +330,15 @@ int main(int argc, char *argv[])
    newton_solver.SetSolver(j_gmres);
 
    // Define the physical parameters
-   LibVectorCoefficient sol(dim, lib_file, "sol_u");
+   LibCoefficient rho(lib_file, "rho", false, rho_param);
    LibCoefficient mu(lib_file, "mu", false, mu_param);
+   LibVectorCoefficient sol(dim, lib_file, "sol_u");
    LibVectorCoefficient force(dim, lib_file, "force");
    LibCoefficient suction(lib_file, "suction", false, 0.0);
    LibCoefficient blowing(lib_file, "blowing", false, 0.0);
 
    // Define weak form and evolution
-   RBVMS::IncNavStoIntegrator integrator(mu, force, sol, suction, blowing);
+   RBVMS::IncNavStoIntegrator integrator(rho, mu, force, sol, suction, blowing);
    RBVMS::ParTimeDepBlockNonlinForm form(spaces, integrator);
    RBVMS::Evolution evo(form, newton_solver);
    ode_solver->Init(evo);
@@ -425,6 +429,7 @@ int main(int argc, char *argv[])
       // Define initial condition from file
       t = 0.0; si = 0; ri = 1; vi = 1;
       LibVectorCoefficient sol(dim, lib_file, "sol_u");
+      sol.SetTime(-1.0);
       x_u.ProjectCoefficient(sol);
       x_p = 0.0;
 
