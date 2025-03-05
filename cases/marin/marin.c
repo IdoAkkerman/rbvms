@@ -30,7 +30,7 @@ void force(double *coord, int dim, double time, double *force, int vdim)
 {
    force[0] = 0.0;
    force[1] = 0.0;
-   force[2] = 0.0;
+   force[2] = -9.81;
 }
 
 double mu(double *coord, int dim, double time)
@@ -39,6 +39,6 @@ double mu(double *coord, int dim, double time)
    double mu_0 = 0.01;
    double s   = -log(mu_f/mu_0)/1.0;
 
-   return fmax(mu_f, mu_0 *exp(-s*time));
+   return 0.1;//fmax(mu_f, mu_0 *exp(-s*time));
 }
 

@@ -49,3 +49,7 @@ s6=news; Plane Surface(s6)={cl6};
 // Volume
 Surface Loop(1) = {s1, s2, s3, s4, s5, s6};
 Volume(1) = {1};
+
+
+Physical Surface(1) = {s1, s2, s3, s4, s5, s6};
+Physical Volume(100) = {1};
