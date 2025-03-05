@@ -427,10 +427,11 @@ int main(int argc, char *argv[])
    Solver* pc_ls   = nullptr;
 
    HypreSmoother* hs_mom = new HypreSmoother();
+   HypreILU* ilu_mom = new HypreILU();
    HypreILU* ilu_cont = new HypreILU();
    HypreILU* ilu_ls = new HypreILU();
 
-   pc_mom  = hs_mom;
+   pc_mom  = ilu_mom;
    pc_cont = ilu_cont;
    pc_ls   = ilu_ls;
 
