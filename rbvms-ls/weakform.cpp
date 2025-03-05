@@ -104,7 +104,7 @@ void IncNavStoIntegrator::GetTau(real_t &tau_m, real_t &tau_c,
    tau_c = 1.0/(tau_m*Gij.Trace());
 
    // Levelset stabilisation parameter
-   tau_c = 1.0/(tau_ls);
+   tau_ls = 1.0/(tau_ls);
 }
 
 // Compute Weak Dirichlet stabilisation parameters
@@ -220,7 +220,6 @@ void IncNavStoIntegrator::AssembleElementVector(
       const IntegrationPoint &ip = ir.IntPoint(i);
       Tr.SetIntPoint(&ip);
       real_t w = ip.weight * Tr.Weight();
-     // real_t rho = c_rho.Eval(Tr, ip);
       real_t mu = c_mu.Eval(Tr, ip);
       real_t mu_eff = mu + mu_ad;
       c_force.Eval(f, Tr, ip);
@@ -290,10 +289,12 @@ void IncNavStoIntegrator::AssembleElementVector(
       flux.Diag(-p, dim);                         // Add pressure
       grad_u.Symmetrize();                        // Grad to strain
       flux.Add(2*mu_eff,grad_u);                  // Add stress to flux
-      AddMult_a_VVt(-rho, u, flux);               // Add convection to flux
       AddMult_a_ABt(w, shg_u, flux, elv_u);       // Add flux term to rhs
-      f.Add(-rho, dudt);                          // Add Acceleration to force
-      AddMult_a_VWt(-w, sh_u, f, elv_u);          // Add force + acc term to rhs
+
+      grad_u.Mult(u,res_m);                       // Add convection
+      res_m += dudt;                              // Add acceleration
+      res_m -= f;                                 // Add force
+      AddMult_a_VWt(w*rho, sh_u, res_m, elv_u);   // Add force + acc term to rhs
 
       // Compute continuity weak residual
       elvec[1]->Add(-w*res_c, sh_p);              // Add Galerkin term
@@ -303,8 +304,7 @@ void IncNavStoIntegrator::AssembleElementVector(
       // Compute continuity weak residual
       real_t res_ls = dphidt + u*grad_phi;
       elvec[2]->Add(w*res_ls, sh_phi);              // Add Galerkin term
-      shg_p.Mult(up, sh_p);                       // PSPG help term
-      elvec[2]->Add(w*res_ls*tau_ls, sh_p);                     // Add SUPG term
+      elvec[2]->Add(w*res_ls*tau_ls, ushg_phi);     // Add SUPG term
    }
 
    elem_cfl = sqrt(elem_cfl);
@@ -407,7 +407,6 @@ void IncNavStoIntegrator::AssembleElementGrad(
       Tr.SetIntPoint(&ip);
       real_t w = ip.weight * Tr.Weight();
 
-   //   real_t rho = c_rho.Eval(Tr, ip);
       real_t mu = c_mu.Eval(Tr, ip);
       real_t mu_eff = mu + mu_ad;
 
@@ -483,24 +482,22 @@ void IncNavStoIntegrator::AssembleElementGrad(
       shg_uT.Transpose(shg_u);
 
 
-
-
       // Momentum - Block diagonal Velocity block (w,u)
-      // Acceleration term
+      // Galerkin terms
       AddMult_a_VVt(w, sh_phi, mat_vphi);
+      AddMult_a_VWt(dt*w, sh_phi, ushg_phi, mat_vphi);
 
-      // Convection terms
-      AddMult_a_VWt(-dt*w, ushg_phi, sh_phi, mat_vphi);
-
-
+      // SUPG terms
+      AddMult_a_VWt(w*tau_ls, ushg_phi, sh_phi, mat_vphi);
+      AddMult_a_VVt(dt*w*tau_ls, ushg_phi, mat_vphi);
 
       // Momentum - Block diagonal Velocity block (w,u)
       // Acceleration term
       AddMult_a_VVt(rho*w, sh_u, mat_wu1);
 
       // Convection terms
-      AddMult_a_VWt(-dt*rho*w, ushg_u, sh_u, mat_wu1);
-      AddMult_a_VWt(-rho*w, ushg_u, dupdu, mat_wu1);
+      AddMult_a_VWt(dt*rho*w, sh_u, ushg_u, mat_wu1);
+     // AddMult_a_VWt(-rho*w, ushg_u, dupdu, mat_wu1);
 
       // Diffusion term
       AddMult_a_AAt(w*mu*dt, shg_u, mat_wu1);
