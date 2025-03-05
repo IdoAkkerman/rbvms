@@ -117,14 +117,14 @@ void IncNavStoIntegrator::GetTauB(real_t &tau_b, real_t &tau_n,
 
    Tr.Elem1->InverseJacobian().Mult(nor,hn);
    tau_b = Cb*mu*hn.Norml2();
-   tau_n = 0.0;
+   tau_n = 10000.0;
 }
 
 //
 real_t IncNavStoIntegrator::GetRho(real_t &phi, Vector &grad_phi, ElementTransformation &Tr)
 {
    real_t epsilon = 1e-10;
-   real_t eps = 2.0;
+   real_t eps = 4.0;
    real_t rho0 = 1.0;
    real_t rho1 = 1000.0;
 
@@ -289,9 +289,10 @@ void IncNavStoIntegrator::AssembleElementVector(
       flux.Diag(-p, dim);                         // Add pressure
       grad_u.Symmetrize();                        // Grad to strain
       flux.Add(2*mu_eff,grad_u);                  // Add stress to flux
+      AddMult_a_VWt(-rho, up, u, flux);           // Add SUPG to flux (incl rey)
       AddMult_a_ABt(w, shg_u, flux, elv_u);       // Add flux term to rhs
 
-      grad_u.Mult(u,res_m);                       // Add convection
+      grad_u.Mult(u,res_m);                       // Add convection (incl cross)
       res_m += dudt;                              // Add acceleration
       res_m -= f;                                 // Add force
       AddMult_a_VWt(w*rho, sh_u, res_m, elv_u);   // Add force + acc term to rhs
@@ -303,8 +304,8 @@ void IncNavStoIntegrator::AssembleElementVector(
 
       // Compute continuity weak residual
       real_t res_ls = dphidt + u*grad_phi;
-      elvec[2]->Add(w*res_ls, sh_phi);              // Add Galerkin term
-      elvec[2]->Add(w*res_ls*tau_ls, ushg_phi);     // Add SUPG term
+      elvec[2]->Add(w*res_ls, sh_phi);            // Add Galerkin term
+      elvec[2]->Add(w*res_ls*tau_ls, ushg_phi);   // Add SUPG term
    }
 
    elem_cfl = sqrt(elem_cfl);
@@ -392,6 +393,9 @@ void IncNavStoIntegrator::AssembleElementGrad(
    dupdu.SetSize(dof_u);
    sh_p.SetSize(dof_p);
    shg_p.SetSize(dof_p, dim);
+   sh_phi.SetSize(dof_phi);
+   shg_phi.SetSize(dof_phi, dim);
+   ushg_phi.SetSize(dof_u);
 
    DenseMatrix shg_uT(dim, dof_u);
 
@@ -474,7 +478,7 @@ void IncNavStoIntegrator::AssembleElementGrad(
       {
          dupdu(j_u) = -tau_m*rho*(sh_u(j_u) + ushg_u(j_u)*dt);
       }
-      shg_u.Mult(u, ushg_u);
+      //shg_u.Mult(u, ushg_u);
 
       // Recompute convective gradient
       MultAtB(elf_u, shg_u, grad_u);
@@ -497,7 +501,7 @@ void IncNavStoIntegrator::AssembleElementGrad(
 
       // Convection terms
       AddMult_a_VWt(dt*rho*w, sh_u, ushg_u, mat_wu1);
-     // AddMult_a_VWt(-rho*w, ushg_u, dupdu, mat_wu1);
+      AddMult_a_VWt(-rho*w, ushg_u, dupdu, mat_wu1);
 
       // Diffusion term
       AddMult_a_AAt(w*mu*dt, shg_u, mat_wu1);
@@ -567,12 +571,15 @@ void IncNavStoIntegrator
 {
    int dof_u = el1[0]->GetDof();
    int dof_p = el1[1]->GetDof();
+   int dof_phi = el1[2]->GetDof();
 
    elvec[0]->SetSize(dof_u*dim);
    elvec[1]->SetSize(dof_p);
+   elvec[2]->SetSize(dof_phi);
 
    *elvec[0] = 0.0;
    *elvec[1] = 0.0;
+   *elvec[2] = 0.0;
    outflow = 0.0;
 
    elf_u.UseExternalData(elsol[0]->GetData(), dof_u, dim);
@@ -596,10 +603,17 @@ void IncNavStoIntegrator
       CalcOrtho(Tr.Jacobian(), nor); // nor = n.da
       real_t w = ip.weight;          // No weight --> taken care of by nor
 
-      real_t rho = c_rho.Eval(*Tr.Elem1, eip);
       el1[0]->CalcPhysShape(*Tr.Elem1, sh_u);
       elf_u.MultTranspose(sh_u, u);
       elf_du.MultTranspose(sh_u, dudt);
+
+      el1[2]->CalcPhysShape(*Tr.Elem1, sh_phi);
+      real_t phi = sh_phi*(*elsol[2]);
+
+      el1[2]->CalcPhysDShape(*Tr.Elem1, shg_phi);
+      shg_phi.MultTranspose(*elsol[2], grad_phi);
+
+      real_t rho = GetRho(phi, grad_phi, *Tr.Elem1);
 
       real_t un = u*nor;
       if (suction)
@@ -628,23 +642,30 @@ void IncNavStoIntegrator
 {
    int dof_u = el1[0]->GetDof();
    int dof_p = el1[1]->GetDof();
+   int dof_phi = el1[2]->GetDof();
 
    elf_u.UseExternalData(elsol[0]->GetData(), dof_u, dim);
    elf_du.UseExternalData(elrate[0]->GetData(), dof_u, dim);
 
    DenseMatrix &mat_wu = *elmats(0,0);
-   DenseMatrix &mat_wp = *elmats(0,1);
-   DenseMatrix &mat_qu = *elmats(1,0);
-   DenseMatrix &mat_qp = *elmats(1,1);
 
    mat_wu.SetSize(dof_u*dim, dof_u*dim);
-   mat_wp.SetSize(0,0);
-   mat_qu.SetSize(0,0);
-   mat_qp.SetSize(0,0);
+   elmats(0,1)->SetSize(0,0);
+   elmats(0,2)->SetSize(0,0);
+
+   elmats(1,0)->SetSize(0,0);
+   elmats(1,1)->SetSize(0,0);
+   elmats(1,2)->SetSize(0,0);
+
+   elmats(2,0)->SetSize(0,0);
+   elmats(2,1)->SetSize(0,0);
+   elmats(2,2)->SetSize(0,0);
 
    mat_wu = 0.0;
 
    sh_u.SetSize(dof_u);
+   sh_phi.SetSize(dof_phi);
+   shg_phi.SetSize(dof_phi, dim);
 
    int intorder = 2*el1[0]->GetOrder()+2;
    const IntegrationRule &ir = IntRules.Get(Tr.GetGeometryType(), intorder);
@@ -662,13 +683,21 @@ void IncNavStoIntegrator
       CalcOrtho(Tr.Jacobian(), nor); // nor = n.da
       real_t w = ip.weight;          // No weight --> taken care of by nor
 
-      real_t rho = c_rho.Eval(*Tr.Elem1, eip);
       el1[0]->CalcPhysShape(*Tr.Elem1, sh_u);
       elf_u.MultTranspose(sh_u, u);
       elf_du.MultTranspose(sh_u, dudt);
+
       real_t un = u*nor;
 
       if (un < 0.0) continue;
+
+      el1[2]->CalcPhysShape(*Tr.Elem1, sh_phi);
+      real_t phi = sh_phi*(*elsol[2]);
+
+      el1[2]->CalcPhysDShape(*Tr.Elem1, shg_phi);
+      shg_phi.MultTranspose(*elsol[2], grad_phi);
+
+      real_t rho = GetRho(phi, grad_phi, *Tr.Elem1);
 
       // Momentum - Velocity block (w,u)
       for (int j_u = 0; j_u < dof_u; ++j_u)
@@ -715,18 +744,28 @@ void IncNavStoIntegrator
 {
    int dof_u = el1[0]->GetDof();
    int dof_p = el1[1]->GetDof();
+   int dof_phi = el1[2]->GetDof();
 
    elvec[0]->SetSize(dof_u*dim);
    elvec[1]->SetSize(dof_p);
+   elvec[2]->SetSize(dof_phi);
 
    *elvec[0] = 0.0;
    *elvec[1] = 0.0;
+   *elvec[2] = 0.0;
 
    elf_u.UseExternalData(elsol[0]->GetData(), dof_u, dim);
    elf_du.UseExternalData(elrate[0]->GetData(), dof_u, dim);
    elv_u.UseExternalData(elvec[0]->GetData(), dof_u, dim);
 
    sh_u.SetSize(dof_u);
+   shg_u.SetSize(dof_u, dim);
+
+   sh_p.SetSize(dof_p);
+   shg_p.SetSize(dof_p, dim);
+
+   sh_phi.SetSize(dof_phi);
+   shg_phi.SetSize(dof_phi, dim);
 
    int intorder = 2*el1[0]->GetOrder();
    const IntegrationRule &ir = IntRules.Get(Tr.GetGeometryType(), intorder);
@@ -741,8 +780,7 @@ void IncNavStoIntegrator
       // Access the neighboring element's integration point
       const IntegrationPoint &eip = Tr.GetElement1IntPoint();
 
-      real_t rho = c_rho.Eval(*Tr.Elem1, eip);
-      real_t mu = c_mu.Eval(*Tr.Elem1, eip);
+      real_t mu = 0.0;//c_mu.Eval(*Tr.Elem1, eip);
       c_sol.Eval(up, *Tr.Elem1, eip);
 
       real_t w = ip.weight * Tr.Weight();
@@ -769,6 +807,16 @@ void IncNavStoIntegrator
 
       el1[1]->CalcPhysShape(*Tr.Elem1, sh_p);
       real_t p = sh_p*(*elsol[1]);
+
+      el1[2]->CalcPhysShape(*Tr.Elem1, sh_phi);
+      real_t phi = sh_phi*(*elsol[2]);
+      real_t dphidt = sh_phi*(*elrate[2]);
+
+      el1[2]->CalcPhysDShape(*Tr.Elem1, shg_phi);
+      shg_phi.MultTranspose(*elsol[2], grad_phi);
+      shg_phi.Mult(u, ushg_phi);
+
+      real_t rho = GetRho(phi, grad_phi, Tr);
 
       GetTauB(tau_b, tau_n, mu, u, nor,Tr);
 
@@ -809,24 +857,46 @@ void IncNavStoIntegrator
 {
    int dof_u = el1[0]->GetDof();
    int dof_p = el1[1]->GetDof();
+   int dof_phi = el1[2]->GetDof();
 
    elf_u.UseExternalData(elsol[0]->GetData(), dof_u, dim);
    elf_du.UseExternalData(elrate[0]->GetData(), dof_u, dim);
 
    DenseMatrix &mat_wu = *elmats(0,0);
    DenseMatrix &mat_wp = *elmats(0,1);
+   DenseMatrix &mat_wphi = *elmats(0,2);
+
    DenseMatrix &mat_qu = *elmats(1,0);
    DenseMatrix &mat_qp = *elmats(1,1);
+   DenseMatrix &mat_qphi = *elmats(1,2);
+
+   DenseMatrix &mat_vu = *elmats(2,0);
+   DenseMatrix &mat_vp = *elmats(2,1);
+   DenseMatrix &mat_vphi = *elmats(2,2);
 
    mat_wu.SetSize(dof_u*dim, dof_u*dim);
    mat_wp.SetSize(dof_u*dim, dof_p);
+   mat_wphi.SetSize(dof_u*dim, dof_phi);
+
    mat_qu.SetSize(dof_p, dof_u*dim);
    mat_qp.SetSize(dof_p, dof_p);
+   mat_qphi.SetSize(dof_p, dof_phi);
+
+   mat_vu.SetSize(dof_p, dof_u*dim);
+   mat_vp.SetSize(dof_p, dof_p);
+   mat_vphi.SetSize(dof_p, dof_phi);
 
    mat_wu = 0.0;
    mat_wp = 0.0;
+   mat_wphi = 0.0;
+
    mat_qu = 0.0;
    mat_qp = 0.0;
+   mat_qphi = 0.0;
+
+   mat_vu = 0.0;
+   mat_vp = 0.0;
+   mat_vphi = 0.0;
 
    sh_u.SetSize(dof_u);
    shg_u.SetSize(dof_u, dim);
@@ -834,6 +904,8 @@ void IncNavStoIntegrator
    dupdu.SetSize(dof_u);
    sh_p.SetSize(dof_p);
    shg_p.SetSize(dof_p, dim);
+   sh_phi.SetSize(dof_phi);
+   shg_phi.SetSize(dof_phi, dim);
 
    int intorder = 2*el1[0]->GetOrder();
    const IntegrationRule &ir = IntRules.Get(Tr.GetGeometryType(), intorder);
@@ -847,8 +919,7 @@ void IncNavStoIntegrator
 
       // Access the neighboring element's integration point
       const IntegrationPoint &eip = Tr.GetElement1IntPoint();
-      real_t rho = c_rho.Eval(*Tr.Elem1, eip);
-      real_t mu = c_mu.Eval(*Tr.Elem1, eip);
+      real_t mu = 0.0;//c_mu.Eval(*Tr.Elem1, eip);
       CalcOrtho(Tr.Jacobian(), nor);
       nor /= nor.Norml2();
 
@@ -860,6 +931,16 @@ void IncNavStoIntegrator
 
       el1[0]->CalcPhysDShape(*Tr.Elem1, shg_u);
       el1[1]->CalcPhysShape(*Tr.Elem1, sh_p);
+
+      el1[2]->CalcPhysShape(*Tr.Elem1, sh_phi);
+      real_t phi = sh_phi*(*elsol[2]);
+      real_t dphidt = sh_phi*(*elrate[2]);
+
+      el1[2]->CalcPhysDShape(*Tr.Elem1, shg_phi);
+      shg_phi.MultTranspose(*elsol[2], grad_phi);
+      shg_phi.Mult(u, ushg_phi);
+
+      real_t rho = GetRho(phi, grad_phi, Tr);
 
       GetTauB(tau_b, tau_n, mu, u, nor,Tr);
 
