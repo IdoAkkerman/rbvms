@@ -1,7 +1,7 @@
 TODO
 
 # Build info
-rbvms/buildInfo.hpp
+*/buildInfo.hpp
 
 # Build directories
 build/*
