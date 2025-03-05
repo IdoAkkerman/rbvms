@@ -9,7 +9,6 @@
 #define RBVMS_NAVSTO_HPP
 
 #include "mfem.hpp"
-#include "tau.hpp"
 
 using namespace mfem;
 
