@@ -30,6 +30,7 @@ IncNavStoIntegrator::IncNavStoIntegrator(Coefficient &rho,
    grad_u.SetSize(dim);
    hess_u.SetSize(dim, (dim*(dim+1))/2);
    grad_p.SetSize(dim);
+   grad_phi.SetSize(dim);
    Gij.SetSize(dim);
    nor.SetSize(dim);
    hn.SetSize(dim);
@@ -57,7 +58,8 @@ IncNavStoIntegrator::IncNavStoIntegrator(Coefficient &rho,
 }
 
 // Compute RBVMS stabilisation parameters
-void IncNavStoIntegrator::GetTau(real_t &tau_m, real_t &tau_c, real_t &cfl2,
+void IncNavStoIntegrator::GetTau(real_t &tau_m, real_t &tau_c,
+                                 real_t &tau_ls, real_t &cfl2,
                                  real_t& rho, real_t &mu, Vector &u,
                                  ElementTransformation &T)
 {
@@ -71,17 +73,19 @@ void IncNavStoIntegrator::GetTau(real_t &tau_m, real_t &tau_c, real_t &cfl2,
    tau_m = Ct/(dt*dt);
 
    // Convective part
-   tau_c = 0.0;
+   tau_ls = 0.0;
    for (int j = 0; j < dim; j++)
    {
       real_t uj = u[j];
       for (int i = 0; i < dim; i++)
       {
-         tau_c += Gij(i,j)*u[i]*uj;
+         tau_ls += Gij(i,j)*u[i]*uj;
       }
    }
-   cfl2 = tau_c/tau_m;
-   tau_m += tau_c*rho*rho;
+   cfl2 = tau_ls/tau_m;
+
+   tau_ls += tau_m;
+   tau_m = rho*rho*tau_ls;
 
    // Diffusive part
    real_t tmp = Cd*Cd*mu*mu;
@@ -98,84 +102,9 @@ void IncNavStoIntegrator::GetTau(real_t &tau_m, real_t &tau_c, real_t &cfl2,
 
    // Continuity stabilisation parameter
    tau_c = 1.0/(tau_m*Gij.Trace());
-}
 
-// Compute element average artifical diffusion
-real_t IncNavStoIntegrator::GetElemArtDiff(const Array<const FiniteElement *> &el,
-                         ElementTransformation &Tr,
-                         const Array<const Vector *> &elsol,
-                         const Array<const Vector *> &elrate)
-{
-   if (el.Size() != 3)
-   {
-      mfem_error("IncNavStoIntegrator::AssembleElementVector"
-                 " has finite element space of incorrect block number");
-   }
-
-   int dof_u = el[0]->GetDof();
-   int dof_p = el[1]->GetDof();
-
-   int spaceDim = Tr.GetSpaceDim();
-   bool hess = false;//(el[0]->GetDerivType() == (int) FiniteElement::HESS);
-   if (dim != spaceDim)
-   {
-      mfem_error("IncNavStoIntegrator::AssembleElementVector"
-                 " is not defined on manifold meshes");
-   }
-
-   elf_u.UseExternalData(elsol[0]->GetData(), dof_u, dim);
-   elf_du.UseExternalData(elrate[0]->GetData(), dof_u, dim);
-
-   sh_u.SetSize(dof_u);
-   shg_u.SetSize(dof_u, dim);
-   ushg_u.SetSize(dof_u);
-   // shh_u.SetSize(dof_u, (dim*(dim+1))/2);
-   shg_p.SetSize(dof_p, dim);
-
-   int intorder = 2*el[0]->GetOrder();
-   const IntegrationRule &ir = IntRules.Get(el[0]->GetGeomType(), intorder);
-
-   double num = 0.0;
-   double den = 0.0;
-   for (int i = 0; i < ir.GetNPoints(); ++i)
-   {
-      const IntegrationPoint &ip = ir.IntPoint(i);
-      Tr.SetIntPoint(&ip);
-      real_t w = ip.weight * Tr.Weight();
-      c_force.Eval(f, Tr, ip);
-
-      // Velocity gradient in reference element
-      el[0]->CalcDShape(ip, shg_u);
-      shg_u.Mult(u, ushg_u);
-      double ndux = grad_u.FNorm(); // Norm of gradient in reference space
-
-      // Compute shape and interpolate
-      el[0]->CalcPhysShape(Tr, sh_u);
-      elf_u.MultTranspose(sh_u, u);
-      elf_du.MultTranspose(sh_u, dudt);
-
-      el[0]->CalcPhysDShape(Tr, shg_u);
-      shg_u.Mult(u, ushg_u);
-
-      el[1]->CalcPhysDShape(Tr, shg_p);
-      shg_p.MultTranspose(*elsol[1], grad_p);
-
-      // Compute strong residual
-      MultAtB(elf_u, shg_u, grad_u);
-      grad_u.Mult(u,res_m);   // Add convection
-      res_m += dudt;          // Add acceleration
-      res_m += grad_p;        // Add pressure
-      res_m -= f;             // Subtract force
-
-      // Metric tensor
-      MultAtB(Tr.InverseJacobian(),Tr.InverseJacobian(),Gij);
-
-      // Compute numerator and denominator
-      double nr = res_m.Norml2();
-      num += nr*w;
-      den += ndux*w;
-   }
-   return 0.0*num/fmax(den,1e-6);
+   // Levelset stabilisation parameter
+   tau_c = 1.0/(tau_ls);
 }
 
 // Compute Weak Dirichlet stabilisation parameters
@@ -191,43 +120,44 @@ void IncNavStoIntegrator::GetTauB(real_t &tau_b, real_t &tau_n,
    tau_n = 0.0;
 }
 
-// Get energy
-real_t IncNavStoIntegrator::GetElementEnergy(
-   const Array<const FiniteElement *>&el,
-   ElementTransformation &Tr,
-   const Array<const Vector *> &elsol,
-   const Array<const Vector *> &elrate)
+//
+real_t IncNavStoIntegrator::GetRho(real_t &phi, Vector &grad_phi, ElementTransformation &Tr)
 {
-   if (el.Size() != 2)
+   real_t epsilon = 1e-10;
+   real_t eps = 2.0;
+   real_t rho0 = 1.0;
+   real_t rho1 = 1000.0;
+
+   // Metric tensor
+   MultAtB(Tr.InverseJacobian(),Tr.InverseJacobian(),Gij);
+
+   ///
+   real_t gGg = 0.0;
+   for (int j = 0; j < dim; j++)
    {
-      mfem_error("IncNavStoIntegrator::GetElementEnergy"
-                 " has incorrect block finite element space size!");
+      real_t gj = grad_phi[j];
+      for (int i = 0; i < dim; i++)
+      {
+         gGg += Gij(i,j)*grad_phi[i]*gj;
+      }
    }
-   int dof_u = el[0]->GetDof();
-   Vector tau(3);
+   real_t h = grad_phi.Norml2()/sqrt(fmax(gGg, epsilon));
 
-   sh_u.SetSize(dof_u);
-   elf_u.UseExternalData(elsol[0]->GetData(), dof_u, dim);
 
-   int intorder = 2*el[0]->GetOrder();
-   const IntegrationRule &ir = IntRules.Get(el[0]->GetGeomType(), intorder);
+   real_t rphi = phi/(eps*h);
 
-   real_t energy = 0.0;
-
-   for (int i = 0; i < ir.GetNPoints(); ++i)
+   if (rphi < -1.0)
    {
-      const IntegrationPoint &ip = ir.IntPoint(i);
-      Tr.SetIntPoint(&ip);
-
-      real_t w = ip.weight * Tr.Weight();
-
-      el[0]->CalcPhysShape(Tr, sh_u);
-      elf_u.MultTranspose(sh_u, u);
-
-      energy += w*(u*u)/2;
+      return rho0;
    }
-
-   return energy;
+   else if (rphi > 1.0)
+   {
+      return rho1;
+   }
+   else 
+   {
+      return rho0 + (rho1-rho0)*(1.0 + sin(M_PI*rphi/2))/2;
+   }
 }
 
 // Assemble the element interior residual vectors
@@ -247,6 +177,7 @@ void IncNavStoIntegrator::AssembleElementVector(
 
    int dof_u = el[0]->GetDof();
    int dof_p = el[1]->GetDof();
+   int dof_phi = el[2]->GetDof();
 
    int spaceDim = Tr.GetSpaceDim();
    bool hess = false;//(el[0]->GetDerivType() == (int) FiniteElement::HESS);
@@ -257,9 +188,11 @@ void IncNavStoIntegrator::AssembleElementVector(
    }
    elvec[0]->SetSize(dof_u*dim);
    elvec[1]->SetSize(dof_p);
+   elvec[2]->SetSize(dof_phi);
 
    *elvec[0] = 0.0;
    *elvec[1] = 0.0;
+   *elvec[2] = 0.0;
 
    elf_u.UseExternalData(elsol[0]->GetData(), dof_u, dim);
    elf_du.UseExternalData(elrate[0]->GetData(), dof_u, dim);
@@ -271,10 +204,13 @@ void IncNavStoIntegrator::AssembleElementVector(
    shh_u.SetSize(dof_u, (dim*(dim+1))/2);
    sh_p.SetSize(dof_p);
    shg_p.SetSize(dof_p, dim);
+   sh_phi.SetSize(dof_phi);
+   shg_phi.SetSize(dof_phi, dim);
+   ushg_phi.SetSize(dof_u);
 
    int intorder = 2*el[0]->GetOrder();
    const IntegrationRule &ir = IntRules.Get(el[0]->GetGeomType(), intorder);
-   real_t tau_m, tau_c, cfl2;
+   real_t tau_m, tau_c, tau_ls, cfl2;
    elem_cfl = 0.0;
 
    double mu_ad = 0.0;// GetElemArtDiff(el, Tr, elsol, elrate);
@@ -284,7 +220,7 @@ void IncNavStoIntegrator::AssembleElementVector(
       const IntegrationPoint &ip = ir.IntPoint(i);
       Tr.SetIntPoint(&ip);
       real_t w = ip.weight * Tr.Weight();
-      real_t rho = c_rho.Eval(Tr, ip);
+     // real_t rho = c_rho.Eval(Tr, ip);
       real_t mu = c_mu.Eval(Tr, ip);
       real_t mu_eff = mu + mu_ad;
       c_force.Eval(f, Tr, ip);
@@ -303,13 +239,23 @@ void IncNavStoIntegrator::AssembleElementVector(
       el[1]->CalcPhysDShape(Tr, shg_p);
       shg_p.MultTranspose(*elsol[1], grad_p);
 
+      el[2]->CalcPhysShape(Tr, sh_phi);
+      real_t phi = sh_phi*(*elsol[2]);
+      real_t dphidt = sh_phi*(*elrate[2]);
+
+      el[2]->CalcPhysDShape(Tr, shg_phi);
+      shg_phi.MultTranspose(*elsol[2], grad_phi);
+      shg_phi.Mult(u, ushg_phi);
+
+      real_t rho = GetRho(phi, grad_phi, Tr);
+
       // Compute strong residual
       MultAtB(elf_u, shg_u, grad_u);
       grad_u.Mult(u,res_m);   // Add convection
       res_m += dudt;          // Add acceleration
+      res_m -= f;             // Subtract force
       res_m *= rho;
       res_m += grad_p;        // Add pressure
-      res_m -= f;             // Subtract force
 
       if (hess)               // Add diffusion
       {
@@ -332,7 +278,7 @@ void IncNavStoIntegrator::AssembleElementVector(
       real_t res_c = grad_u.Trace();
 
       // Compute stability params
-      GetTau(tau_m, tau_c, cfl2, rho, mu, u, Tr);
+      GetTau(tau_m, tau_c, tau_ls, cfl2, rho, mu, u, Tr);
       elem_cfl = fmax(elem_cfl, cfl2);
 
       // Small scale reconstruction
@@ -353,6 +299,12 @@ void IncNavStoIntegrator::AssembleElementVector(
       elvec[1]->Add(-w*res_c, sh_p);              // Add Galerkin term
       shg_p.Mult(up, sh_p);                       // PSPG help term
       elvec[1]->Add(w, sh_p);                     // Add PSPG term
+
+      // Compute continuity weak residual
+      real_t res_ls = dphidt + u*grad_phi;
+      elvec[2]->Add(w*res_ls, sh_phi);              // Add Galerkin term
+      shg_p.Mult(up, sh_p);                       // PSPG help term
+      elvec[2]->Add(w*res_ls*tau_ls, sh_p);                     // Add SUPG term
    }
 
    elem_cfl = sqrt(elem_cfl);
@@ -368,6 +320,7 @@ void IncNavStoIntegrator::AssembleElementGrad(
 {
    int dof_u = el[0]->GetDof();
    int dof_p = el[1]->GetDof();
+   int dof_phi = el[2]->GetDof();
 
    bool hess = false;// = (el[0]->GetDerivType() == (int) FiniteElement::HESS);
 
@@ -376,18 +329,39 @@ void IncNavStoIntegrator::AssembleElementGrad(
 
    DenseMatrix &mat_wu = *elmats(0,0);
    DenseMatrix &mat_wp = *elmats(0,1);
+   DenseMatrix &mat_wphi = *elmats(0,2);
+
    DenseMatrix &mat_qu = *elmats(1,0);
    DenseMatrix &mat_qp = *elmats(1,1);
+   DenseMatrix &mat_qphi = *elmats(1,2);
+
+   DenseMatrix &mat_vu = *elmats(2,0);
+   DenseMatrix &mat_vp = *elmats(2,1);
+   DenseMatrix &mat_vphi = *elmats(2,2);
 
    mat_wu.SetSize(dof_u*dim, dof_u*dim);
    mat_wp.SetSize(dof_u*dim, dof_p);
+   mat_wphi.SetSize(dof_u*dim, dof_phi);
+
    mat_qu.SetSize(dof_p, dof_u*dim);
    mat_qp.SetSize(dof_p, dof_p);
+   mat_qphi.SetSize(dof_p, dof_phi);
+
+   mat_vu.SetSize(dof_p, dof_u*dim);
+   mat_vp.SetSize(dof_p, dof_p);
+   mat_vphi.SetSize(dof_p, dof_phi);
 
    mat_wu = 0.0;
    mat_wp = 0.0;
+   mat_wphi = 0.0;
+
    mat_qu = 0.0;
    mat_qp = 0.0;
+   mat_qphi = 0.0;
+
+   mat_vu = 0.0;
+   mat_vp = 0.0;
+   mat_vphi = 0.0;
 
    DenseMatrix mat_wu1(dof_u, dof_u);
    mat_wu1 = 0.0;
@@ -423,7 +397,7 @@ void IncNavStoIntegrator::AssembleElementGrad(
 
    int intorder = 2*el[0]->GetOrder();
    const IntegrationRule &ir = IntRules.Get(el[0]->GetGeomType(), intorder);
-   real_t tau_m, tau_c, cfl2;
+   real_t tau_m, tau_c, tau_ls, cfl2;
 
    double mu_ad = 0.0;//GetElemArtDiff(el, Tr, elsol, elrate);
 
@@ -433,7 +407,7 @@ void IncNavStoIntegrator::AssembleElementGrad(
       Tr.SetIntPoint(&ip);
       real_t w = ip.weight * Tr.Weight();
 
-      real_t rho = c_rho.Eval(Tr, ip);
+   //   real_t rho = c_rho.Eval(Tr, ip);
       real_t mu = c_mu.Eval(Tr, ip);
       real_t mu_eff = mu + mu_ad;
 
@@ -452,13 +426,23 @@ void IncNavStoIntegrator::AssembleElementGrad(
       el[1]->CalcPhysDShape(Tr, shg_p);
       shg_p.MultTranspose(*elsol[1], grad_p);
 
+      el[2]->CalcPhysShape(Tr, sh_phi);
+      real_t phi = sh_phi*(*elsol[2]);
+      real_t dphidt = sh_phi*(*elrate[2]);
+
+      el[2]->CalcPhysDShape(Tr, shg_phi);
+      shg_phi.MultTranspose(*elsol[2], grad_phi);
+      shg_phi.Mult(u, ushg_phi);
+
+      real_t rho = GetRho(phi, grad_phi, Tr);
+
       // Compute strong residual
       MultAtB(elf_u, shg_u, grad_u);
       grad_u.Mult(u,res_m);   // Add convection
       res_m += dudt;          // Add acceleration
+      res_m -= f;             // Subtract force
       res_m *= rho;
       res_m += grad_p;        // Add pressure
-      res_m -= f;             // Subtract force
 
       if (hess)               // Add diffusion
       {
@@ -480,7 +464,7 @@ void IncNavStoIntegrator::AssembleElementGrad(
       }
 
       // Compute stability params
-      GetTau(tau_m, tau_c, cfl2, rho, mu, u, Tr);
+      GetTau(tau_m, tau_c, tau_ls, cfl2, rho, mu, u, Tr);
 
       // Small scale reconstruction
       up.Set(-tau_m,res_m);
@@ -497,6 +481,18 @@ void IncNavStoIntegrator::AssembleElementGrad(
       MultAtB(elf_u, shg_u, grad_u);
 
       shg_uT.Transpose(shg_u);
+
+
+
+
+      // Momentum - Block diagonal Velocity block (w,u)
+      // Acceleration term
+      AddMult_a_VVt(w, sh_phi, mat_vphi);
+
+      // Convection terms
+      AddMult_a_VWt(-dt*w, ushg_phi, sh_phi, mat_vphi);
+
+
 
       // Momentum - Block diagonal Velocity block (w,u)
       // Acceleration term

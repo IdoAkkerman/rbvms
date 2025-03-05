@@ -42,18 +42,18 @@ private:
    Array2D<int> hmap;
 
    /// Physical values
-   Vector u, dudt, f, grad_p, res_m, up, nor, traction;
+   Vector u, dudt, f, grad_p, grad_phi, res_m, up, nor, traction;
    DenseMatrix flux;
 
    /// Solution & Residual vector
    DenseMatrix elf_u, elf_du, elv_u;
 
    /// Shape function data
-   Vector sh_u, ushg_u, sh_p, dupdu;
-   DenseMatrix shg_u, shh_u, shg_p, grad_u, hess_u;
+   Vector sh_u, ushg_u, sh_p, sh_phi, ushg_phi, dupdu;
+   DenseMatrix shg_u, shh_u, shg_p, shg_phi, grad_u, hess_u;
 
    /// Compute RBVMS stabilisation parameters
-   void GetTau(real_t &tau_m, real_t &tau_c, real_t &cfl2,
+   void GetTau(real_t &tau_m, real_t &tau_c, real_t &tau_ls, real_t &cfl2,
                real_t &rho, real_t &mu, Vector &u,
                ElementTransformation &Tr);
 
@@ -62,6 +62,9 @@ private:
                 real_t &mu, Vector &u,
                 Vector &nor,
                 FaceElementTransformations &Tr);
+
+   ///
+   real_t GetRho(real_t &phi, Vector &grad_phi, ElementTransformation &Tr);
 
 public:
    /// Constructor
@@ -82,18 +85,6 @@ public:
       c_suction.SetTime(t);
       c_blowing.SetTime(t);
    };
-
-   /// Assemble the local energy
-   real_t GetElementEnergy(const Array<const FiniteElement *>&el,
-                           ElementTransformation &Tr,
-                           const Array<const Vector *> &elfun,
-                           const Array<const Vector *> &elrate);
-
-   /// Assemble the element constant artifical diffusion
-   real_t GetElemArtDiff(const Array<const FiniteElement *> &el,
-                         ElementTransformation &Tr,
-                         const Array<const Vector *> &elsol,
-                         const Array<const Vector *> &elrate);
 
    /// Assemble the element interior residual vectors
    void AssembleElementVector(const Array<const FiniteElement *> &el,
