@@ -160,6 +160,47 @@ real_t IncNavStoIntegrator::GetRho(real_t &phi, Vector &grad_phi, ElementTransfo
    }
 }
 
+//
+real_t IncNavStoIntegrator::GetRhoGrad(real_t &phi, Vector &grad_phi, ElementTransformation &Tr)
+{
+   real_t epsilon = 1e-10;
+   real_t eps = 4.0;
+   real_t rho0 = 1.0;
+   real_t rho1 = 1000.0;
+
+   // Metric tensor
+   MultAtB(Tr.InverseJacobian(),Tr.InverseJacobian(),Gij);
+
+   ///
+   real_t gGg = 0.0;
+   for (int j = 0; j < dim; j++)
+   {
+      real_t gj = grad_phi[j];
+      for (int i = 0; i < dim; i++)
+      {
+         gGg += Gij(i,j)*grad_phi[i]*gj;
+      }
+   }
+   real_t h = grad_phi.Norml2()/sqrt(fmax(gGg, epsilon));
+
+
+   real_t rphi = phi/(eps*h);
+
+   if (rphi < -1.0)
+   {
+      return 0.0;
+   }
+   else if (rphi > 1.0)
+   {
+      return 0.0;
+   }
+   else 
+   {
+      return (rho1-rho0)*cos(M_PI*rphi/2)*M_PI/4;
+   }
+}
+
+
 // Assemble the element interior residual vectors
 void IncNavStoIntegrator::AssembleElementVector(
    const Array<const FiniteElement *> &el,
@@ -366,15 +407,17 @@ void IncNavStoIntegrator::AssembleElementGrad(
 
    DenseMatrix mat_wu1(dof_u, dof_u);
    mat_wu1 = 0.0;
-   DenseMatrix mat_wp1[dim], mat_qu1[dim], mat_up[dim];
+   DenseMatrix mat_wp1[dim], mat_qu1[dim], mat_up[dim], mat_wphi1[dim];
    for (int i_dim = 0; i_dim < dim; ++i_dim)
    {
       mat_wp1[i_dim].SetSize(dof_u,dof_p);
       mat_qu1[i_dim].SetSize(dof_p,dof_u);
       mat_up[i_dim].SetSize(dof_u,dof_p);
+      mat_wphi1[i_dim].SetSize(dof_u,dof_phi);
       mat_wp1[i_dim] = 0.0;
       mat_qu1[i_dim] = 0.0;
       mat_up[i_dim] = 0.0;
+      mat_wphi1[i_dim] = 0.0;
    }
 
    int dim2 = (dim*(dim+1))/2;
@@ -422,6 +465,7 @@ void IncNavStoIntegrator::AssembleElementGrad(
       MultAtB(elf_u, shg_u, grad_u);
 
       shg_u.Mult(u, ushg_u);
+     // MultAtB(elf_u, shg_u, grad_u);
 
       el[1]->CalcPhysShape(Tr, sh_p);
       real_t p = sh_p*(*elsol[1]);
@@ -438,14 +482,22 @@ void IncNavStoIntegrator::AssembleElementGrad(
       shg_phi.Mult(u, ushg_phi);
 
       real_t rho = GetRho(phi, grad_phi, Tr);
+      real_t drho = GetRhoGrad(phi, grad_phi, Tr);
 
       // Compute strong residual
-      MultAtB(elf_u, shg_u, grad_u);
       grad_u.Mult(u,res_m);   // Add convection
       res_m += dudt;          // Add acceleration
       res_m -= f;             // Subtract force
       res_m *= rho;
       res_m += grad_p;        // Add pressure
+
+      /////
+      Vector bla(dim);
+      grad_u.Mult(u,bla);   // Add convection
+      bla += dudt;          // Add acceleration
+      bla -= f;             // Subtract force
+
+
 
       if (hess)               // Add diffusion
       {
@@ -486,7 +538,7 @@ void IncNavStoIntegrator::AssembleElementGrad(
       shg_uT.Transpose(shg_u);
 
 
-      // Momentum - Block diagonal Velocity block (w,u)
+      // Level - set - Block diagonal level-set block (v,phi)
       // Galerkin terms
       AddMult_a_VVt(w, sh_phi, mat_vphi);
       AddMult_a_VWt(dt*w, sh_phi, ushg_phi, mat_vphi);
@@ -494,6 +546,11 @@ void IncNavStoIntegrator::AssembleElementGrad(
       // SUPG terms
       AddMult_a_VWt(w*tau_ls, ushg_phi, sh_phi, mat_vphi);
       AddMult_a_VVt(dt*w*tau_ls, ushg_phi, mat_vphi);
+
+      for (int i_dim = 0; i_dim < dim; ++i_dim)
+      {
+         AddMult_a_VVt(drho*dt*w*bla[i_dim], sh_u, mat_wphi1[i_dim]);
+      }
 
       // Momentum - Block diagonal Velocity block (w,u)
       // Acceleration term
@@ -555,6 +612,9 @@ void IncNavStoIntegrator::AssembleElementGrad(
          mat_wu.AddSubMatrix(j_dim * dof_u, i_dim * dof_u, mat_uu[ii++]);
       }
       mat_wu.AddSubMatrix(i_dim * dof_u, i_dim * dof_u, mat_uu[ii++]);
+
+      mat_wphi.AddSubMatrix(i_dim * dof_u, 0, mat_wphi1[i_dim]);
+
    }
 }
 

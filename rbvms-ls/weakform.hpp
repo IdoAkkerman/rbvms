@@ -64,7 +64,8 @@ private:
 
    ///
    real_t GetRho(real_t &phi, Vector &grad_phi, ElementTransformation &Tr);
-
+   ///
+   real_t GetRhoGrad(real_t &phi, Vector &grad_phi, ElementTransformation &Tr);
 public:
    /// Constructor
    IncNavStoIntegrator(Coefficient &rho_,
