@@ -69,13 +69,14 @@ void ParTimeDepBlockNonlinForm::SetStrongBC (Array<int> strong_bdr)
    strong_bdr.Copy(strongBCBdr);
 
    // Translate indices
-   Array<Array<int> *> ess_bdr(2);
+   Array<Array<int> *> ess_bdr(3);
    Array<int> ess_bdr_u(fes[0]->GetMesh()->bdr_attributes.Max());
    Array<int> ess_bdr_p(fes[1]->GetMesh()->bdr_attributes.Max());
+   Array<int> ess_bdr_phi(fes[2]->GetMesh()->bdr_attributes.Max());
 
    ess_bdr_u = 0;
    ess_bdr_p = 0;
-
+   ess_bdr_phi = 0;
    for (int b = 0; b < strongBCBdr.Size(); ++b)
    {
       ess_bdr_u[strongBCBdr[b]-1] = 1;
@@ -83,9 +84,10 @@ void ParTimeDepBlockNonlinForm::SetStrongBC (Array<int> strong_bdr)
 
    ess_bdr[0] = &ess_bdr_u;
    ess_bdr[1] = &ess_bdr_p;
+   ess_bdr[2] = &ess_bdr_phi;
 
    // Dummy rhs
-   Array<Vector *> rhs(2);
+   Array<Vector *> rhs(3);
    rhs = nullptr;
 
    // Enforce BCs using function form parent class

@@ -304,70 +304,6 @@ int main(int argc, char *argv[])
 
    // 5. Define the time stepping algorithm
 
-   // Set up the preconditioner
-   RBVMS::JacobianPreconditioner jac_prec(bOffsets);
-
-   Solver* pc_mom  = nullptr;
-   Solver* pc_cont = nullptr;
-   Solver* pc_ls   = nullptr;
-
-   HypreSmoother* hs_mom = new HypreSmoother();
-   HypreILU* ilu_cont = new HypreILU();
-   HypreILU* ilu_ls = new HypreILU();
-
-   pc_mom  = hs_mom;
-   pc_cont = ilu_cont;
-   pc_ls   = ilu_ls;
-
-   jac_prec.SetPreconditioner(0, pc_mom);
-   jac_prec.SetPreconditioner(1, pc_cont);
-   jac_prec.SetPreconditioner(2, pc_ls);
-
-   // Set up the Jacobian solver
-   RBVMS::GeneralResidualMonitor j_monitor(MPI_COMM_WORLD,"\t\tFGMRES", 10);
-   FGMRESSolver j_gmres(MPI_COMM_WORLD);
-   j_gmres.iterative_mode = false;
-   j_gmres.SetRelTol(GMRES_RelTol);
-   j_gmres.SetAbsTol(1e-12);
-   j_gmres.SetMaxIter(GMRES_MaxIter);
-   j_gmres.SetPrintLevel(-1);
-   j_gmres.SetMonitor(j_monitor);
-   j_gmres.SetPreconditioner(jac_prec);
-
-   // Set up the Newton solver
-   RBVMS::SystemResidualMonitor newton_monitor(MPI_COMM_WORLD,
-                                               "Newton", 1,
-                                               bOffsets);
-   NewtonSolver newton_solver(MPI_COMM_WORLD);
-   newton_solver.iterative_mode = true;
-   newton_solver.SetPrintLevel(-1);
-   newton_solver.SetMonitor(newton_monitor);
-   newton_solver.SetRelTol(Newton_RelTol);
-   newton_solver.SetAbsTol(1e-12);
-   newton_solver.SetMaxIter(Newton_MaxIter );
-   newton_solver.SetSolver(j_gmres);
-
-   // Define the physical parameters
-   LibCoefficient rho(lib_file, "rho", false, rho_param);
-   LibCoefficient mu(lib_file, "mu", false, mu_param);
-   LibVectorCoefficient sol(dim, lib_file, "sol_u");
-   LibVectorCoefficient force(dim, lib_file, "force");
-   LibCoefficient suction(lib_file, "suction", false, 0.0);
-   LibCoefficient blowing(lib_file, "blowing", false, 0.0);
-
-   // Define weak form and evolution
-   RBVMS::IncNavStoIntegrator integrator(rho, mu, force, sol, suction, blowing);
-   RBVMS::ParTimeDepBlockNonlinForm form(spaces, integrator);
-   RBVMS::Evolution evo(form, newton_solver);
-   ode_solver->Init(evo);
-
-   // Set boundaries in the weakform
-   form.SetStrongBC (strong_bdr);
-   form.SetWeakBC   (weak_bdr);
-   form.SetOutflowBC(outflow_bdr);
-   form.SetSuctionBC(suction_bdr);
-   form.SetBlowingBC(blowing_bdr);
-
    // 6. Define the solution vector, grid function and output
    BlockVector xp(bOffsets);
    BlockVector dxp(bOffsets);
@@ -455,7 +391,7 @@ int main(int argc, char *argv[])
       // Define initial condition from file
       t = 0.0; si = 0; ri = 1; vi = 1;
       LibVectorCoefficient sol_u(dim, lib_file, "sol_u");
-      LibCoefficient sol_phi(lib_file, "rho", false, rho_param);
+      LibCoefficient sol_phi(lib_file, "sol_phi");
       sol_u.SetTime(-1.0);
       sol_phi.SetTime(-1.0);
       x_u.ProjectCoefficient(sol_u);
@@ -482,6 +418,70 @@ int main(int argc, char *argv[])
          rdc.RegisterField("dphi", dx_phi[0]);
       }
    }
+
+   // Set up the preconditioner
+   RBVMS::JacobianPreconditioner jac_prec(bOffsets);
+
+   Solver* pc_mom  = nullptr;
+   Solver* pc_cont = nullptr;
+   Solver* pc_ls   = nullptr;
+
+   HypreSmoother* hs_mom = new HypreSmoother();
+   HypreILU* ilu_cont = new HypreILU();
+   HypreILU* ilu_ls = new HypreILU();
+
+   pc_mom  = hs_mom;
+   pc_cont = ilu_cont;
+   pc_ls   = ilu_ls;
+
+   jac_prec.SetPreconditioner(0, pc_mom);
+   jac_prec.SetPreconditioner(1, pc_cont);
+   jac_prec.SetPreconditioner(2, pc_ls);
+
+   // Set up the Jacobian solver
+   RBVMS::GeneralResidualMonitor j_monitor(MPI_COMM_WORLD,"\t\tFGMRES", 10);
+   FGMRESSolver j_gmres(MPI_COMM_WORLD);
+   j_gmres.iterative_mode = false;
+   j_gmres.SetRelTol(GMRES_RelTol);
+   j_gmres.SetAbsTol(1e-12);
+   j_gmres.SetMaxIter(GMRES_MaxIter);
+   j_gmres.SetPrintLevel(-1);
+   j_gmres.SetMonitor(j_monitor);
+   j_gmres.SetPreconditioner(jac_prec);
+
+   // Set up the Newton solver
+   RBVMS::SystemResidualMonitor newton_monitor(MPI_COMM_WORLD,
+                                               "Newton", 1,
+                                               bOffsets);
+   NewtonSolver newton_solver(MPI_COMM_WORLD);
+   newton_solver.iterative_mode = true;
+   newton_solver.SetPrintLevel(-1);
+   newton_solver.SetMonitor(newton_monitor);
+   newton_solver.SetRelTol(Newton_RelTol);
+   newton_solver.SetAbsTol(1e-12);
+   newton_solver.SetMaxIter(Newton_MaxIter );
+   newton_solver.SetSolver(j_gmres);
+
+   // Define the physical parameters
+   LibCoefficient rho(lib_file, "rho", false, rho_param);
+   LibCoefficient mu(lib_file, "mu", false, mu_param);
+   LibVectorCoefficient sol(dim, lib_file, "sol_u");
+   LibVectorCoefficient force(dim, lib_file, "force");
+   LibCoefficient suction(lib_file, "suction", false, 0.0);
+   LibCoefficient blowing(lib_file, "blowing", false, 0.0);
+
+   // Define weak form and evolution
+   RBVMS::IncNavStoIntegrator integrator(rho, mu, force, sol, suction, blowing);
+   RBVMS::ParTimeDepBlockNonlinForm form(spaces, integrator);
+   RBVMS::Evolution evo(form, newton_solver);
+   ode_solver->Init(evo);
+
+   // Set boundaries in the weakform
+   form.SetStrongBC (strong_bdr);
+   form.SetWeakBC   (weak_bdr);
+   form.SetOutflowBC(outflow_bdr);
+   form.SetSuctionBC(suction_bdr);
+   form.SetBlowingBC(blowing_bdr);
 
    // 7. Actual time integration
 

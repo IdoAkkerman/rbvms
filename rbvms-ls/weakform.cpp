@@ -106,7 +106,7 @@ real_t IncNavStoIntegrator::GetElemArtDiff(const Array<const FiniteElement *> &e
                          const Array<const Vector *> &elsol,
                          const Array<const Vector *> &elrate)
 {
-   if (el.Size() != 2)
+   if (el.Size() != 3)
    {
       mfem_error("IncNavStoIntegrator::AssembleElementVector"
                  " has finite element space of incorrect block number");
@@ -239,7 +239,7 @@ void IncNavStoIntegrator::AssembleElementVector(
    const Array<Vector *> &elvec,
    real_t &elem_cfl)
 {
-   if (el.Size() != 2)
+   if (el.Size() != 3)
    {
       mfem_error("IncNavStoIntegrator::AssembleElementVector"
                  " has finite element space of incorrect block number");
