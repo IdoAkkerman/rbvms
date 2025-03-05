@@ -10,7 +10,6 @@
 #define RBVMS_MONITOR_HPP
 
 #include "mfem.hpp"
-#include "tau.hpp"
 
 using namespace mfem;
 

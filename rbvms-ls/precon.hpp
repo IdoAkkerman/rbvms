@@ -9,7 +9,6 @@
 #define RBVMS_PRECON_HPP
 
 #include "mfem.hpp"
-#include "tau.hpp"
 
 using namespace mfem;
 
