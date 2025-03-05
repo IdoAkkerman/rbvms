@@ -124,11 +124,15 @@ void ParTimeDepBlockNonlinForm::SetTimeAndSolution(const real_t t,
                                                    const real_t dt_,
                                                    const Vector &x0)
 {
-   xs0.SetSize(block_offsets[1]);
+   xs0.SetSize(block_offsets[1]-block_offsets[0]);
+   xs2.SetSize(block_offsets[3]-block_offsets[2]);
    xs_true.Update(const_cast<Vector &>(x0), block_trueOffsets);
 
    fes[0]->GetProlongationMatrix()->Mult(
          xs_true.GetBlock(0), xs0);
+
+   fes[2]->GetProlongationMatrix()->Mult(
+         xs_true.GetBlock(2), xs2);
 
    dt = dt_;
    integrator.SetTimeAndStep(t,dt);
@@ -157,6 +161,11 @@ void ParTimeDepBlockNonlinForm::Mult(const Vector &dx, Vector &y) const
 
    fes[1]->GetProlongationMatrix()->Mult(
          dxs_true.GetBlock(1), xs.GetBlock(1));
+
+   fes[2]->GetProlongationMatrix()->Mult(
+         dxs_true.GetBlock(2), dxs.GetBlock(2));
+
+   add(xs2,dt,dxs.GetBlock(2),xs.GetBlock(2));   // x = x0 + dt*dx
 
    // Actual assembly
    MultBlocked(xs, dxs, ys);
@@ -471,6 +480,11 @@ const BlockOperator& ParTimeDepBlockNonlinForm
 
    fes[1]->GetProlongationMatrix()->Mult(
          dxs_true.GetBlock(1), xs.GetBlock(1));
+
+   fes[2]->GetProlongationMatrix()->Mult(
+         dxs_true.GetBlock(2), dxs.GetBlock(2));
+
+   add(xs2,dt,dxs.GetBlock(2),xs.GetBlock(2));   // x = x0 + dt*dx
 
    // (re)assemble Grad without b.c. into 'Grads'
    ComputeGradientBlocked(xs, dxs);

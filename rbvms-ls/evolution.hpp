@@ -79,7 +79,7 @@ private:
    Array<int> blowingBdr;
 
    /// Solution & Residual vector
-   mutable Vector xs0;
+   mutable Vector xs0, xs2;
    mutable BlockVector dxs;
    mutable BlockVector dxs_true;
 
