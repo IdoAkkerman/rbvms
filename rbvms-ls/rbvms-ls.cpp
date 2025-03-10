@@ -19,6 +19,8 @@
 #include "evolution.hpp"
 #include "precon.hpp"
 #include "monitor.hpp"
+#include "dist_solver.hpp"
+//#include "mfem-common.hpp"
 
 #include <sys/stat.h>
 
@@ -167,6 +169,11 @@ int main(int argc, char *argv[])
    args.AddOption(&vis_dir, "-vd", "--vis-dir",
                   "Directory for visualization files.\n\t");
 
+   //
+   int solver_type = 0;
+
+   args.AddOption(&solver_type, "-dist", "--distance-solver",
+                  "Redistancing solver type.");
 
    // Parse parameters
    args.Parse();
@@ -204,9 +211,9 @@ int main(int argc, char *argv[])
    {
       if (strong_bdr.Size()>0) {cout<<"Strong  = "; strong_bdr.Print();}
       if (weak_bdr.Size()>0) {cout<<"Weak    = "; weak_bdr.Print();}
-      if (outflow_bdr.Size()>0){ cout<<"Outflow = "; outflow_bdr.Print() ;}
-      if (suction_bdr.Size()>0){ cout<<"Suction = "; suction_bdr.Print() ;}
-      if (blowing_bdr.Size()>0){ cout<<"Blowing = "; blowing_bdr.Print() ;}
+      if (outflow_bdr.Size()>0) { cout<<"Outflow = "; outflow_bdr.Print() ;}
+      if (suction_bdr.Size()>0) { cout<<"Suction = "; suction_bdr.Print() ;}
+      if (blowing_bdr.Size()>0) { cout<<"Blowing = "; blowing_bdr.Print() ;}
       if (master_bdr.Size()>0) {cout<<"Periodic (master) = "; master_bdr.Print();}
       if (slave_bdr.Size()>0) {cout<<"Periodic (slave)  = "; slave_bdr.Print();}
    }
@@ -230,7 +237,7 @@ int main(int argc, char *argv[])
    for (int b = 0; b < bnd_flag.Size(); b++)
    {
       MFEM_VERIFY(bnd_flag[b],
-                 "Not all boundaries have a boundary condition set.");
+                  "Not all boundaries have a boundary condition set.");
    }
 
    // Select the time integrator
@@ -250,19 +257,19 @@ int main(int argc, char *argv[])
    fecs[2] = FECollection::NewH1(order, dim, pmesh.IsNURBS());
 
    Array<ParFiniteElementSpace *> spaces(3);
-   spaces[0] = new ParFiniteElementSpace(&pmesh, fecs[0], dim, 
+   spaces[0] = new ParFiniteElementSpace(&pmesh, fecs[0], dim,
                                          Ordering::byNODES  //, Ordering::byVDIM);
                                         );// ,master_bdr, slave_bdr);
    spaces[1] = new ParFiniteElementSpace(&pmesh, fecs[1], 1, Ordering::byNODES
-                                         );//  ,master_bdr, slave_bdr);
+                                        );//  ,master_bdr, slave_bdr);
 
    spaces[2] = new ParFiniteElementSpace(&pmesh, fecs[2], 1, Ordering::byNODES
-                                         );//  ,master_bdr, slave_bdr);
+                                        );//  ,master_bdr, slave_bdr);
 
    // Report the degree of freedoms used
    {
       Array<int> tdof(num_procs),udof(num_procs),
-                 ldof(num_procs),pdof(num_procs);
+            ldof(num_procs),pdof(num_procs);
       tdof = 0;
       tdof[myid] = spaces[0]->TrueVSize();
       MPI_Reduce(tdof.GetData(), udof.GetData(), num_procs,
@@ -314,6 +321,7 @@ int main(int argc, char *argv[])
    ParGridFunction x_u(spaces[0]);
    ParGridFunction x_p(spaces[1]);
    ParGridFunction x_phi(spaces[2]);
+   ParGridFunction x_dist(spaces[2]);
 
    Array<ParGridFunction*> dx_u(nstate);
    Array<ParGridFunction*> dx_p(nstate);
@@ -332,6 +340,7 @@ int main(int argc, char *argv[])
    vdc.RegisterField("u", &x_u);
    vdc.RegisterField("p", &x_p);
    vdc.RegisterField("phi", &x_phi);
+   vdc.RegisterField("dist", &x_dist);
 
    // Define the restart output
    VisItDataCollection rdc("step", &pmesh);
@@ -484,6 +493,44 @@ int main(int argc, char *argv[])
    form.SetSuctionBC(suction_bdr);
    form.SetBlowingBC(blowing_bdr);
 
+
+
+
+
+
+
+   DistanceSolver *dist_solver = NULL;
+   if (solver_type == 0)
+   {
+      auto ds = new HeatDistanceSolver(0.01);//t_param * dx * dx);
+      //ds->transform = false;
+      ds->smooth_steps = 25;//smooth_steps;
+      ds->vis_glvis = false;
+      dist_solver = ds;
+   }
+   else if (solver_type == 1)
+   {
+      const int p = 10;
+      const int newton_iter = 50;
+      dist_solver = new PLapDistanceSolver(p, newton_iter);
+   }
+   else if (solver_type == 2)
+   {
+      dist_solver = new NormalizationDistanceSolver;
+   }
+   else { MFEM_ABORT("Wrong solver option."); }
+   dist_solver->print_level.FirstAndLast().Summary();
+
+
+
+
+   GridFunctionCoefficient phi_coeff(&x_phi);
+
+
+
+
+
+
    // 7. Actual time integration
 
    // Open output file
@@ -533,6 +580,14 @@ int main(int argc, char *argv[])
       xp0 = xp;
 
       ode_solver->Step(xp, t, dt);
+
+      x_phi.Distribute(xp.GetBlock(2));
+      GridFunctionCoefficient phi_coeff(&x_phi);
+      dist_solver->ComputeScalarDistance(phi_coeff, x_dist);
+      //xp.GetBlock(2) = x_dist;
+      x_dist.GetTrueDofs(xp.GetBlock(2));
+      //    cout<<xp.GetBlock(2).Size()<<" "<<x_dist.Size()<<endl;
+
       si++;
 
       // Postprocess solution
