@@ -57,8 +57,8 @@ DenseMatrix Evolution::GetForce()
 
 // Formulation Constructor
 ParTimeDepBlockNonlinForm::
-   ParTimeDepBlockNonlinForm(Array<ParFiniteElementSpace *> &pfes,
-                             RBVMS::IncNavStoIntegrator &integrator)
+ParTimeDepBlockNonlinForm(Array<ParFiniteElementSpace *> &pfes,
+                          RBVMS::IncNavStoIntegrator &integrator)
    : ParBlockNonlinearForm(pfes), integrator(integrator), hasGrad(false)
 {
 }
@@ -129,10 +129,10 @@ void ParTimeDepBlockNonlinForm::SetTimeAndSolution(const real_t t,
    xs_true.Update(const_cast<Vector &>(x0), block_trueOffsets);
 
    fes[0]->GetProlongationMatrix()->Mult(
-         xs_true.GetBlock(0), xs0);
+      xs_true.GetBlock(0), xs0);
 
    fes[2]->GetProlongationMatrix()->Mult(
-         xs_true.GetBlock(2), xs2);
+      xs_true.GetBlock(2), xs2);
 
    dt = dt_;
    integrator.SetTimeAndStep(t,dt);
@@ -155,15 +155,15 @@ void ParTimeDepBlockNonlinForm::Mult(const Vector &dx, Vector &y) const
    ys.Update(block_offsets);
 
    fes[0]->GetProlongationMatrix()->Mult(
-         dxs_true.GetBlock(0), dxs.GetBlock(0));
+      dxs_true.GetBlock(0), dxs.GetBlock(0));
 
    add(xs0,dt,dxs.GetBlock(0),xs.GetBlock(0));   // x = x0 + dt*dx
 
    fes[1]->GetProlongationMatrix()->Mult(
-         dxs_true.GetBlock(1), xs.GetBlock(1));
+      dxs_true.GetBlock(1), xs.GetBlock(1));
 
    fes[2]->GetProlongationMatrix()->Mult(
-         dxs_true.GetBlock(2), dxs.GetBlock(2));
+      dxs_true.GetBlock(2), dxs.GetBlock(2));
 
    add(xs2,dt,dxs.GetBlock(2),xs.GetBlock(2));   // x = x0 + dt*dx
 
@@ -272,11 +272,11 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
       bool suctionBC = false;
       for (int b=0; b<outflowBdr.Size(); ++b)
       {
-        if ( bdr_attr == outflowBdr[b]) { outflowBC = true; }
+         if ( bdr_attr == outflowBdr[b]) { outflowBC = true; }
       }
       for (int b=0; b<suctionBdr.Size(); ++b)
       {
-        if ( bdr_attr == suctionBdr[b]) { suctionBC= true; }
+         if ( bdr_attr == suctionBdr[b]) { suctionBC= true; }
       }
       if ( !outflowBC && !suctionBC ) { continue; }
 
@@ -396,7 +396,7 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
 // Get Gradient
 BlockOperator & ParTimeDepBlockNonlinForm::GetGradient(const Vector &x) const
 {
-   if (hasGrad) return *pBlockGrad;
+   //  if (hasGrad) return *pBlockGrad;
 
    if (pBlockGrad == NULL)
    {
@@ -466,7 +466,7 @@ BlockOperator & ParTimeDepBlockNonlinForm::GetGradient(const Vector &x) const
 
 // Return the local gradient matrix for the given true-dof vector x
 const BlockOperator& ParTimeDepBlockNonlinForm
-   ::GetLocalGradient(const Vector &dx) const
+::GetLocalGradient(const Vector &dx) const
 {
    // dxs_true is not modified, so const_cast is okay
    dxs_true.Update(const_cast<Vector &>(dx), block_trueOffsets);
@@ -474,15 +474,15 @@ const BlockOperator& ParTimeDepBlockNonlinForm
    dxs.Update(block_offsets);
 
    fes[0]->GetProlongationMatrix()->Mult(
-         dxs_true.GetBlock(0), dxs.GetBlock(0));
+      dxs_true.GetBlock(0), dxs.GetBlock(0));
 
    add(xs0,dt,dxs.GetBlock(0),xs.GetBlock(0));   // x = x0 + dt*dx
 
    fes[1]->GetProlongationMatrix()->Mult(
-         dxs_true.GetBlock(1), xs.GetBlock(1));
+      dxs_true.GetBlock(1), xs.GetBlock(1));
 
    fes[2]->GetProlongationMatrix()->Mult(
-         dxs_true.GetBlock(2), dxs.GetBlock(2));
+      dxs_true.GetBlock(2), dxs.GetBlock(2));
 
    add(xs2,dt,dxs.GetBlock(2),xs.GetBlock(2));   // x = x0 + dt*dx
 
@@ -504,8 +504,8 @@ const BlockOperator& ParTimeDepBlockNonlinForm
 
 // Specialized version of GetGradient() for BlockVector
 void ParTimeDepBlockNonlinForm
-   ::ComputeGradientBlocked(const BlockVector &bx,
-                            const BlockVector &bdx) const
+::ComputeGradientBlocked(const BlockVector &bx,
+                         const BlockVector &bdx) const
 {
    const int skip_zeros = 0;
    Array<Array<int> *> vdofs(fes.Size());
@@ -595,11 +595,11 @@ void ParTimeDepBlockNonlinForm
       bool suctionBC = false;
       for (int b=0; b<outflowBdr.Size(); ++b)
       {
-        if ( bdr_attr == outflowBdr[b]) { outflowBC = true; }
+         if ( bdr_attr == outflowBdr[b]) { outflowBC = true; }
       }
       for (int b=0; b<suctionBdr.Size(); ++b)
       {
-        if ( bdr_attr == suctionBdr[b]) { suctionBC = true; }
+         if ( bdr_attr == suctionBdr[b]) { suctionBC = true; }
       }
 
       if ( !outflowBC && !suctionBC ) { continue; }

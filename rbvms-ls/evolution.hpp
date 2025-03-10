@@ -20,7 +20,7 @@ namespace RBVMS
 // Predefine class
 class ParTimeDepBlockNonlinForm;
 
-/** This class provide the correct interface between the time-dependent 
+/** This class provide the correct interface between the time-dependent
     block nonlinear form (defined below) and the MFEM::ODESolver.
 */
 class Evolution : public TimeDependentOperator
