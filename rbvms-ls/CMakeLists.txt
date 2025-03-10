@@ -28,7 +28,8 @@ set(SOURCES
     monitor.cpp
     precon.cpp
     weakform.cpp
-    printInfo.cpp)
+    printInfo.cpp
+    dist_solver.cpp)
 
 set(HEADERS
     coefficients.hpp
@@ -36,13 +37,14 @@ set(HEADERS
     monitor.hpp
     precon.hpp
     weakform.hpp
-    buildInfo.hpp)
+    buildInfo.hpp
+    dist_solver.hpp)
 
 #-------------------------------------------------------------------------------
 # Create header
 #-------------------------------------------------------------------------------
 get_filename_component(tmp1 ${MFEM_DIR} REALPATH)
-get_filename_component(tmp2 ${PROJECT_BINARY_DIR}/.. REALPATH)
+get_filename_component(tmp2 ${PROJECT_BINARY_DIR}/../mfem REALPATH)
 
 if (${tmp1} STREQUAL ${tmp2})
   message(STATUS "Report RBVMS-LS, MFEM and hypre in build info.")
@@ -64,36 +66,38 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
-# Add packages
-#-------------------------------------------------------------------------------
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/../config)
-
-#-------------------------------------------------------------------------------
-# Add MPI
-#-------------------------------------------------------------------------------
-find_package(MPI REQUIRED)
-
-set(MPICXX mpicxx)
-set(MPI_CXX_INCLUDE_DIRS ${MPI_CXX_INCLUDE_PATH})
-set(CMAKE_CXX_COMPILER ${MPICXX})
-
-#-------------------------------------------------------------------------------
 # Add mfem
 #-------------------------------------------------------------------------------
-find_package(mfem REQUIRED NAMES MFEM HINTS "${MFEM_DIR}")
+set(mfem_DIR ${MFEM_DIR})
+find_package(mfem NAMES MFEM)
 
 message(STATUS "Found mfem: in ${MFEM_DIR} (version ${MFEM_VERSION})")
-message(STATUS "MFEM_CXX_FLAGS = ${MFEM_CXX_FLAGS}")
-message(STATUS "MFEM_INCLUDE_DIRS = ${MFEM_INCLUDE_DIRS}")
-message(STATUS "MFEM_LIBRARIES = ${MFEM_LIBRARIES}")
 
-include_directories(${MFEM_INCLUDE_DIRS})
+# Add mfem common
+add_library(mfem-common STATIC IMPORTED GLOBAL)
+set_property(TARGET mfem-common PROPERTY
+             IMPORTED_LOCATION "${MFEM_DIR}/miniapps/common/libmfem-common.a")
+
+set_property(TARGET mfem-common PROPERTY
+             INCLUDE_DIRECTORIES "${MFEM_DIR}/../../mfem/miniapps/common")
+
+list(PREPEND  MFEM_LIBRARIES mfem-common)
+
+# Add mfem common
+message("MFEM_CXX_FLAGS = ${MFEM_CXX_FLAGS}")
+message("MFEM_INCLUDE_DIRS = ${MFEM_INCLUDE_DIRS}")
+message("MFEM_LIBRARIES = ${MFEM_LIBRARIES}")
+message("MFEM_COMMON_LIBRARIES = ${MFEM_DIR}/mfem/miniapps/common")
+message("MFEM_COMMON_INCLUDES= ${MFEM_DIR}/../mfem/miniapps/common")
+
+
 
 #-------------------------------------------------------------------------------
 # Build executable
 #-------------------------------------------------------------------------------
 add_executable(rbvms-ls rbvms-ls.cpp ${SOURCES} ${HEADERS})
 
-target_link_libraries(rbvms-ls PRIVATE ${MFEM_LIBRARIES} ${CMAKE_DL_LIBS})
+target_link_libraries(rbvms-ls PRIVATE ${MFEM_LIBRARIES}  ${CMAKE_DL_LIBS})
+
 install(TARGETS rbvms-ls DESTINATION bin)
 
