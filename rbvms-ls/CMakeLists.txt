@@ -87,17 +87,13 @@ list(PREPEND  MFEM_LIBRARIES mfem-common)
 message("MFEM_CXX_FLAGS = ${MFEM_CXX_FLAGS}")
 message("MFEM_INCLUDE_DIRS = ${MFEM_INCLUDE_DIRS}")
 message("MFEM_LIBRARIES = ${MFEM_LIBRARIES}")
-message("MFEM_COMMON_LIBRARIES = ${MFEM_DIR}/mfem/miniapps/common")
-message("MFEM_COMMON_INCLUDES= ${MFEM_DIR}/../mfem/miniapps/common")
-
-
 
 #-------------------------------------------------------------------------------
 # Build executable
 #-------------------------------------------------------------------------------
 add_executable(rbvms-ls rbvms-ls.cpp ${SOURCES} ${HEADERS})
 
-target_link_libraries(rbvms-ls PRIVATE ${MFEM_LIBRARIES}  ${CMAKE_DL_LIBS})
+target_link_libraries(rbvms-ls PRIVATE ${MFEM_LIBRARIES} ${CMAKE_DL_LIBS})
 
 install(TARGETS rbvms-ls DESTINATION bin)
 
