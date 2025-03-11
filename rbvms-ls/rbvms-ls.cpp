@@ -406,7 +406,7 @@ int main(int argc, char *argv[])
       x_u.ProjectCoefficient(sol_u);
       x_p = 0.0;
       x_phi.ProjectCoefficient(sol_phi);
-
+      x_dist = 0.0;
       x_u.GetTrueDofs(xp.GetBlock(0));
       x_p.GetTrueDofs(xp.GetBlock(1));
       x_phi.GetTrueDofs(xp.GetBlock(2));
@@ -596,6 +596,7 @@ int main(int argc, char *argv[])
 
       x_phi.Distribute(xp.GetBlock(2));
       GridFunctionCoefficient phi_coeff(&x_phi);
+      x_dist = x_phi;
       dist_solver->ComputeScalarDistance(phi_coeff, x_dist);
       //xp.GetBlock(2) = x_dist;
       x_dist.GetTrueDofs(xp.GetBlock(2));
