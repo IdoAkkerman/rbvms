@@ -86,6 +86,13 @@ public:
       c_blowing.SetTime(t);
    };
 
+   /// Assemble the local energy
+   void GetElementEnergy(const Array<const FiniteElement *>&el,
+                         ElementTransformation &Tr,
+                         const Array<const Vector *> &elfun,
+                         const Array<const Vector *> &elrate,
+                         Vector &energy);
+
    /// Assemble the element interior residual vectors
    void AssembleElementVector(const Array<const FiniteElement *> &el,
                               ElementTransformation &Tr,

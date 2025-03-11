@@ -121,7 +121,8 @@ void IncNavStoIntegrator::GetTauB(real_t &tau_b, real_t &tau_n,
 }
 
 //
-real_t IncNavStoIntegrator::GetRho(real_t &phi, Vector &grad_phi, ElementTransformation &Tr)
+real_t IncNavStoIntegrator::GetRho(real_t &phi, Vector &grad_phi,
+                                   ElementTransformation &Tr)
 {
    real_t epsilon = 1e-10;
    real_t eps = 4.0;
@@ -154,14 +155,15 @@ real_t IncNavStoIntegrator::GetRho(real_t &phi, Vector &grad_phi, ElementTransfo
    {
       return rho1;
    }
-   else 
+   else
    {
       return rho0 + (rho1-rho0)*(1.0 + sin(M_PI*rphi/2))/2;
    }
 }
 
 //
-real_t IncNavStoIntegrator::GetRhoGrad(real_t &phi, Vector &grad_phi, ElementTransformation &Tr)
+real_t IncNavStoIntegrator::GetRhoGrad(real_t &phi, Vector &grad_phi,
+                                       ElementTransformation &Tr)
 {
    real_t epsilon = 1e-10;
    real_t eps = 4.0;
@@ -194,9 +196,101 @@ real_t IncNavStoIntegrator::GetRhoGrad(real_t &phi, Vector &grad_phi, ElementTra
    {
       return 0.0;
    }
-   else 
+   else
    {
       return (rho1-rho0)*cos(M_PI*rphi/2)*M_PI/4;
+   }
+}
+
+// Assemble the element energy
+void IncNavStoIntegrator::GetElementEnergy(const
+                                           Array<const FiniteElement *>&el,
+                                           ElementTransformation &Tr,
+                                           const Array<const Vector *> &elsol,
+                                           const Array<const Vector *> &elrate,
+                                           Vector &energy)
+{
+   if (el.Size() != 3)
+   {
+      mfem_error("IncNavStoIntegrator::AssembleElementVector"
+                 " has finite element space of incorrect block number");
+   }
+
+   int dof_u = el[0]->GetDof();
+   int dof_p = el[1]->GetDof();
+   int dof_phi = el[2]->GetDof();
+
+   int spaceDim = Tr.GetSpaceDim();
+   bool hess = false;//(el[0]->GetDerivType() == (int) FiniteElement::HESS);
+   if (dim != spaceDim)
+   {
+      mfem_error("IncNavStoIntegrator::AssembleElementVector"
+                 " is not defined on manifold meshes");
+   }
+
+   energy.SetSize(3);
+   energy = 0.0;
+
+
+   elf_u.UseExternalData(elsol[0]->GetData(), dof_u, dim);
+   elf_du.UseExternalData(elrate[0]->GetData(), dof_u, dim);
+
+   sh_u.SetSize(dof_u);
+   shg_u.SetSize(dof_u, dim);
+   ushg_u.SetSize(dof_u);
+   shh_u.SetSize(dof_u, (dim*(dim+1))/2);
+   sh_p.SetSize(dof_p);
+   shg_p.SetSize(dof_p, dim);
+   sh_phi.SetSize(dof_phi);
+   shg_phi.SetSize(dof_phi, dim);
+   ushg_phi.SetSize(dof_u);
+
+   int intorder = 2*el[0]->GetOrder();
+   const IntegrationRule &ir = IntRules.Get(el[0]->GetGeomType(), intorder);
+   real_t tau_m, tau_c, tau_ls, cfl2;
+
+
+   double mu_ad = 0.0;// GetElemArtDiff(el, Tr, elsol, elrate);
+
+   for (int i = 0; i < ir.GetNPoints(); ++i)
+   {
+      const IntegrationPoint &ip = ir.IntPoint(i);
+      Tr.SetIntPoint(&ip);
+      real_t w = ip.weight * Tr.Weight();
+      real_t mu = c_mu.Eval(Tr, ip);
+      real_t mu_eff = mu + mu_ad;
+      c_force.Eval(f, Tr, ip);
+
+      // Compute shape and interpolate
+      el[0]->CalcPhysShape(Tr, sh_u);
+      elf_u.MultTranspose(sh_u, u);
+      elf_du.MultTranspose(sh_u, dudt);
+
+      el[0]->CalcPhysDShape(Tr, shg_u);
+      shg_u.Mult(u, ushg_u);
+
+      el[1]->CalcPhysShape(Tr, sh_p);
+      real_t p = sh_p*(*elsol[1]);
+
+      el[1]->CalcPhysDShape(Tr, shg_p);
+      shg_p.MultTranspose(*elsol[1], grad_p);
+
+      el[2]->CalcPhysShape(Tr, sh_phi);
+      real_t phi = sh_phi*(*elsol[2]);
+      real_t dphidt = sh_phi*(*elrate[2]);
+
+      el[2]->CalcPhysDShape(Tr, shg_phi);
+      shg_phi.MultTranspose(*elsol[2], grad_phi);
+      shg_phi.Mult(u, ushg_phi);
+
+      real_t rho = GetRho(phi, grad_phi, Tr);
+
+      Vector x;
+      Tr.Transform(ip, x);
+
+      // Compute strong residual
+      energy[0] += (rho*(u*u)/2)*w;
+      energy[1] += rho*(x*f)*w;
    }
 }
 
@@ -323,27 +417,33 @@ void IncNavStoIntegrator::AssembleElementVector(
 
       // Small scale reconstruction
       up.Set(-tau_m,res_m);
-      u += up;
+      //  u += up;
       p -= tau_c*res_c;
 
+      real_t h = 1.0/fmax(Tr.InverseJacobian().FNorm(), 10e-10);
+      real_t kdc = 0.25*h*res_m.Norml2()/fmax(grad_u.FNorm(), 10e-10);
+      mu += kdc;
+
       // Compute momentum weak residual
+      grad_u.Mult(u,res_m);                       // Add convection (incl cross)
+      res_m += dudt;                              // Add acceleration
+      res_m -= f;                                 // Add force
+      AddMult_a_VWt(w*rho, sh_u, res_m, elv_u);   // Add force + acc term to rhs
+
+
       flux.Diag(-p, dim);                         // Add pressure
       grad_u.Symmetrize();                        // Grad to strain
       flux.Add(2*mu_eff,grad_u);                  // Add stress to flux
       AddMult_a_VWt(-rho, up, u, flux);           // Add SUPG to flux (incl rey)
       AddMult_a_ABt(w, shg_u, flux, elv_u);       // Add flux term to rhs
 
-      grad_u.Mult(u,res_m);                       // Add convection (incl cross)
-      res_m += dudt;                              // Add acceleration
-      res_m -= f;                                 // Add force
-      AddMult_a_VWt(w*rho, sh_u, res_m, elv_u);   // Add force + acc term to rhs
 
       // Compute continuity weak residual
       elvec[1]->Add(-w*res_c, sh_p);              // Add Galerkin term
       shg_p.Mult(up, sh_p);                       // PSPG help term
       elvec[1]->Add(w, sh_p);                     // Add PSPG term
 
-      // Compute continuity weak residual
+      // Compute convection weak residual
       real_t res_ls = dphidt + u*grad_phi;
       elvec[2]->Add(w*res_ls, sh_phi);            // Add Galerkin term
       elvec[2]->Add(w*res_ls*tau_ls, ushg_phi);   // Add SUPG term
@@ -465,7 +565,7 @@ void IncNavStoIntegrator::AssembleElementGrad(
       MultAtB(elf_u, shg_u, grad_u);
 
       shg_u.Mult(u, ushg_u);
-     // MultAtB(elf_u, shg_u, grad_u);
+      // MultAtB(elf_u, shg_u, grad_u);
 
       el[1]->CalcPhysShape(Tr, sh_p);
       real_t p = sh_p*(*elsol[1]);
@@ -497,8 +597,6 @@ void IncNavStoIntegrator::AssembleElementGrad(
       bla += dudt;          // Add acceleration
       bla -= f;             // Subtract force
 
-
-
       if (hess)               // Add diffusion
       {
          el[0]->CalcPhysHessian(Tr,shh_u);
@@ -521,9 +619,13 @@ void IncNavStoIntegrator::AssembleElementGrad(
       // Compute stability params
       GetTau(tau_m, tau_c, tau_ls, cfl2, rho, mu, u, Tr);
 
+      real_t h = 1.0/fmax(Tr.InverseJacobian().FNorm(), 10e-10);
+      real_t kdc = 0.25*h*res_m.Norml2()/fmax(grad_u.FNorm(), 10e-10);
+      mu += kdc;
+
       // Small scale reconstruction
       up.Set(-tau_m,res_m);
-      u += up;
+      // u += up;
 
       // Compute small scale jacobian
       for (int j_u = 0; j_u < dof_u; ++j_u)
@@ -684,7 +786,7 @@ void IncNavStoIntegrator
          outflow += rho * un * w; // No weight --> taken care of by nor
       }
 
-      if (un < 0.0) continue;
+      if (un < 0.0) { continue; }
 
       AddMult_a_VWt(rho*w*un, sh_u, u, elv_u);
    }
@@ -749,7 +851,7 @@ void IncNavStoIntegrator
 
       real_t un = u*nor;
 
-      if (un < 0.0) continue;
+      if (un < 0.0) { continue; }
 
       el1[2]->CalcPhysShape(*Tr.Elem1, sh_phi);
       real_t phi = sh_phi*(*elsol[2]);
@@ -889,16 +991,16 @@ void IncNavStoIntegrator
       AddMult_a_VWt(w, sh_u, traction, elv_u);
 
       // Dual consistency
-      MultVWt(nor,up, flux);
+      MultVWt(nor, up, flux);
       flux.Symmetrize();
       AddMult_a_ABt(-w*2*mu, shg_u, flux, elv_u);
 
       // Continuity
-      elvec[1]->Add(w*un, sh_p);
+      //     elvec[1]->Add(w*un, sh_p);
 
       // Convection
       un = u*nor;
-      if (un < 0.0) continue;
+      if (un < 0.0) { continue; }
 
       AddMult_a_VWt(rho*w*un, sh_u, up, elv_u);
    }
@@ -983,7 +1085,7 @@ void IncNavStoIntegrator
       CalcOrtho(Tr.Jacobian(), nor);
       nor /= nor.Norml2();
 
-      real_t w = ip.weight * Tr.Weight(); 
+      real_t w = ip.weight * Tr.Weight();
 
       el1[0]->CalcPhysShape(*Tr.Elem1, sh_u);
       elf_u.MultTranspose(sh_u, u);
@@ -1068,8 +1170,8 @@ void IncNavStoIntegrator
             int j_dof = j_u + j_dim*dof_u;
             for (int i_u = 0; i_u < dof_u; ++i_u)
             {
-              for (int i_dim = 0; i_dim < dim; ++i_dim)
-              {
+               for (int i_dim = 0; i_dim < dim; ++i_dim)
+               {
                   mat_wu(i_u + i_dim*dof_u, j_dof)
                   += sh_u(i_u)*nor(i_dim)*tmp1;
                }
@@ -1091,24 +1193,24 @@ void IncNavStoIntegrator
             }
          }
       }
-
-      // Continuity - Velocity block (q,u)
-      for (int dim_u = 0; dim_u < dim; ++dim_u)
-      {
-         real_t tmp0 = nor(dim_u)*w*dt;
-         for (int j_u = 0; j_u < dof_u; ++j_u)
-         {
-            real_t tmp1 = sh_u(j_u)*tmp0;
-            for (int i_p = 0; i_p < dof_p; ++i_p)
+      /*
+            // Continuity - Velocity block (q,u)
+            for (int dim_u = 0; dim_u < dim; ++dim_u)
             {
-               mat_qu(i_p, j_u + dof_u * dim_u) += sh_p(i_p)*tmp1;
+               real_t tmp0 = nor(dim_u)*w*dt;
+               for (int j_u = 0; j_u < dof_u; ++j_u)
+               {
+                  real_t tmp1 = sh_u(j_u)*tmp0;
+                  for (int i_p = 0; i_p < dof_p; ++i_p)
+                  {
+                     mat_qu(i_p, j_u + dof_u * dim_u) += sh_p(i_p)*tmp1;
+                  }
+               }
             }
-         }
-      }
-
+      */
       // Convection: Momentum - Velocity block (w,u)
       real_t un = u*nor;
-      if (un < 0.0) continue; 
+      if (un < 0.0) { continue; }
       for (int j_u = 0; j_u < dof_u; ++j_u)
       {
          real_t tmp = rho*sh_u(j_u)*un*w*dt;
