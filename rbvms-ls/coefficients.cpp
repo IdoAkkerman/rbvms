@@ -20,43 +20,48 @@ void LibCoefficient::GetLibFunction(string libName,
    libHandle = dlopen (libName.c_str(), RTLD_LAZY);
    if (!libHandle)
    {
-      cout<<"Library "<<libName<<" not found."<<endl;
+      if (Mpi::Root()) { cout<<"Library "<<libName<<" not found."<<endl; }
       if (required)
       {
          mfem_error("Can not obtain required function.\n");
       }
-      cout <<"Functions:";
-      for (int i = 0; i < funNames.size();i++)
+      if (Mpi::Root())
       {
-         cout<<" "<<funNames[i];
+         cout <<"Functions:";
+         for (int i = 0; i < funNames.size(); i++)
+         {
+            cout<<" "<<funNames[i];
+         }
+         cout<<" will be set to val = "<<val<< endl;
       }
-      cout<<" will be set to val = "<<val<< endl;
       return;
    }
 
    // Search Function
    TDFunction = nullptr;
-   for (int i = 0; i < funNames.size();i++)
+   for (int i = 0; i < funNames.size(); i++)
    {
       TDFunction = (TDFunPtr)dlsym(libHandle, funNames[i].c_str());
-      if (TDFunction) break;
+      if (TDFunction) { break; }
    }
 
    // Check if function is found
    if (!TDFunction)
    {
-      cout <<"Functions:";
-      for (int i = 0; i < funNames.size();i++)
+      if (Mpi::Root())
       {
-         cout<<" "<<funNames[i];
+         cout <<"Functions:";
+         for (int i = 0; i < funNames.size(); i++)
+         {
+            cout<<" "<<funNames[i];
+         }
+         cout<<" can not be found in "<<libName<<endl;
       }
-      cout<<" can not be found in "<<libName<<endl;
-
       if (required)
       {
          mfem_error("Can not obtain required function.\n");
       }
-      cout<<"Function will be set to val = "<<val<< endl;
+      if (Mpi::Root()) { cout<<"Function will be set to val = "<<val<< endl; }
    }
 }
 
@@ -65,7 +70,7 @@ real_t LibCoefficient::Eval(ElementTransformation &T,
                             const IntegrationPoint &ip)
 {
    // Homegenous if not defined
-   if (!TDFunction) return val;
+   if (!TDFunction) { return val; }
 
    // Evaluate library function
    T.Transform(ip, x);
@@ -75,7 +80,7 @@ real_t LibCoefficient::Eval(ElementTransformation &T,
 // Destructor
 LibCoefficient::~LibCoefficient()
 {
-   if (libHandle) dlclose(libHandle);
+   if (libHandle) { dlclose(libHandle); }
 }
 
 
@@ -88,45 +93,52 @@ void LibVectorCoefficient::GetLibFunction(string libName,
    libHandle = dlopen (libName.c_str(), RTLD_LAZY);
    if (!libHandle)
    {
-      cout<<"Library "<<libName<<" not found."<<endl;
+      if (Mpi::Root()) { cout<<"Library "<<libName<<" not found."<<endl; }
       if (required)
       {
          mfem_error("Can not obtain required function.\n");
       }
-      cout <<"Functions:";
-      for (int i = 0; i < funNames.size();i++)
+      if (Mpi::Root())
       {
-         cout<<" "<<funNames[i];
+         cout <<"Functions:";
+         for (int i = 0; i < funNames.size(); i++)
+         {
+            cout<<" "<<funNames[i];
+         }
+         cout<<" will be set to homogenous."<<endl;
       }
-      cout<<" will be set to homogenous."<<endl;
       return;
    }
 
    // Search Function
    TDFunction = nullptr;
-   for (int i = 0; i < funNames.size();i++)
+   for (int i = 0; i < funNames.size(); i++)
    {
       TDFunction = (TDFunPtr)dlsym(libHandle, funNames[i].c_str());
-      if (TDFunction) break;
+      if (TDFunction) { break; }
    }
 
    // Check if function is found
    if (!TDFunction)
    {
-      cout <<"Functions:";
-      for (int i = 0; i < funNames.size();i++)
+      if (Mpi::Root())
       {
-         cout<<" "<<funNames[i];
+         cout <<"Functions:";
+         for (int i = 0; i < funNames.size(); i++)
+         {
+            cout<<" "<<funNames[i];
+         }
+         cout<<" can not be found in "<<libName<<endl;
       }
-      cout<<" can not be found in "<<libName<<endl;
 
       if (required)
       {
          mfem_error("Can not obtain required function.\n");
       }
-      cout<<"Function will be set to homogenous."<<endl;
+      if (Mpi::Root()) { cout<<"Function will be set to homogenous."<<endl; }
    }
 }
+
 
 // Evaluate coefficient
 void LibVectorCoefficient::Eval(Vector &V,
@@ -148,5 +160,5 @@ void LibVectorCoefficient::Eval(Vector &V,
 //  Destructor
 LibVectorCoefficient::~LibVectorCoefficient()
 {
-   if (libHandle) dlclose(libHandle);
+   if (libHandle) { dlclose(libHandle); }
 }
