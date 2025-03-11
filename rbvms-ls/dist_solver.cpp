@@ -40,12 +40,9 @@ real_t Heaviside::rphi(real_t &phi, real_t &h)
    return phi/(eps*h);
 }
 
-//
-real_t Heaviside::step(real_t &phi, Vector &grad_phi, ElementTransformation &Tr)
+// Smooth step function
+real_t Heaviside::step(real_t &rphi)
 {
-   real_t h = Heaviside::h(grad_phi, Tr);
-   real_t rphi = Heaviside::rphi(phi, h);
-
    if (rphi < -1.0)
    {
       return 0.0;
@@ -60,19 +57,27 @@ real_t Heaviside::step(real_t &phi, Vector &grad_phi, ElementTransformation &Tr)
    }
 }
 
-//
+real_t Heaviside::step(real_t &phi, Vector &grad_phi, ElementTransformation &Tr)
+{
+   real_t h = Heaviside::h(grad_phi, Tr);
+   real_t rphi = Heaviside::rphi(phi, h);
+   return Heaviside::step(rphi);
+}
+
+// Smooth sign function
+real_t Heaviside::sign(real_t &rphi)
+{
+   return 2*Heaviside::step(rphi) - 1.0;
+}
+
 real_t Heaviside::sign(real_t &phi, Vector &grad_phi, ElementTransformation &Tr)
 {
    return 2*Heaviside::step(phi, grad_phi, Tr) - 1.0;
 }
 
-//
-real_t Heaviside::dirac(real_t &phi, Vector &grad_phi,
-                        ElementTransformation &Tr)
+// Smooth dirac distribution
+real_t Heaviside::dirac(real_t &rphi, real_t &h)
 {
-   real_t h = Heaviside::h(grad_phi, Tr);
-   real_t rphi = Heaviside::rphi(phi, h);
-
    if (rphi < -1.0)
    {
       return 0.0;
@@ -87,65 +92,15 @@ real_t Heaviside::dirac(real_t &phi, Vector &grad_phi,
    }
 }
 
-ForceCoefficient::ForceCoefficient(real_t l)
-   : lambda(l)
+real_t Heaviside::dirac(real_t &phi, Vector &grad_phi,
+                        ElementTransformation &Tr)
 {
+   real_t h = Heaviside::h(grad_phi, Tr);
+   real_t rphi = Heaviside::rphi(phi, h);
+   return Heaviside::dirac(rphi, h);
 }
 
-real_t ForceCoefficient::Eval(ElementTransformation &T,
-                              const IntegrationPoint &ip)
-{
-   phi = ls_gf->GetValue(T, ip);
-   ls_gf-> GetGradient(T, grad_phi);
-   return Heaviside::sign(phi, grad_phi, T)
-          + lambda*Heaviside::dirac(phi, grad_phi, T)*phi;
-}
-
-ReactionCoefficient::ReactionCoefficient(real_t l)
-   : lambda(l)
-{
-}
-
-real_t ReactionCoefficient::Eval(ElementTransformation &T,
-                                 const IntegrationPoint &ip)
-{
-   phi = ls_gf->GetValue(T, ip);
-   ls_gf-> GetGradient(T, grad_phi);
-   return lambda*Heaviside::dirac(phi, grad_phi, T);
-}
-
-ConvectionCoefficient::ConvectionCoefficient(int dim)
-   : VectorCoefficient(dim)
-{
-
-}
-
-void ConvectionCoefficient::Eval(Vector &V, ElementTransformation &T,
-                                 const IntegrationPoint &ip)
-{
-   phi = ls_gf->GetValue(T, ip);
-   ls_gf-> GetGradient(T, grad_phi);
-   //std::cout<<"ls_gf    = ";grad_phi.Print();
-   real_t Se = Heaviside::sign(phi, grad_phi, T);
-   distance-> GetGradient(T, grad_phi);
-   //std::cout<<"distance = ";grad_phi.Print();
-   // ls_gf-> GetGradient(T, grad_phi);
-
-   V.Set(Se/fmax(grad_phi.Norml2(),10e-10), grad_phi);
-}
-
-//
-StabConvReactIntegrator::StabConvReactIntegrator(VectorCoefficient *a,
-                                                 Coefficient *k,
-                                                 Coefficient *f)
-   : adv(a), react(k), force(f)
-{
-}
-
-StabConvReactIntegrator::~StabConvReactIntegrator()
-{
-}
-
+// Define the integration rule based on FE order
 const IntegrationRule &StabConvReactIntegrator::GetRule(
    const FiniteElement &trial_fe,
    const FiniteElement &test_fe,
@@ -155,6 +110,7 @@ const IntegrationRule &StabConvReactIntegrator::GetRule(
    return IntRules.Get(trial_fe.GetGeomType(), order);
 }
 
+// Define tau
 real_t StabConvReactIntegrator::GetTau(real_t &k, Vector &a,
                                        ElementTransformation &T)
 {
@@ -191,8 +147,8 @@ void StabConvReactIntegrator::AssembleElementVector(const FiniteElement &el,
 {
    int nd = el.GetDof();
    int dim = el.GetDim();
-   real_t w,k,tau,f,phi,res;
-   Vector a(dim), dphidx(dim);
+   real_t w,k,tau,f,phi,phi0,res;
+   Vector a(dim), dphidx(dim), dphidx0(dim);
 
    elvect.SetSize(nd);
    shape.SetSize(nd);
@@ -209,12 +165,6 @@ void StabConvReactIntegrator::AssembleElementVector(const FiniteElement &el,
       Trans.SetIntPoint (&ip);
       w = Trans.Weight() * ip.weight;
 
-      // Evaluate coefficients
-      f = force->Eval(Trans, ip);
-      k = react->Eval(Trans, ip);
-      adv->Eval(a, Trans, ip);
-      tau = GetTau(k, a, Trans);
-
       // Calculate shapes
       el.CalcPhysShape(Trans, shape);
       phi = shape*elfun;
@@ -222,6 +172,21 @@ void StabConvReactIntegrator::AssembleElementVector(const FiniteElement &el,
       // Calculate shapes
       el.CalcPhysDShape(Trans, dshape);
       dshape.MultTranspose(elfun, dphidx);
+
+      // Interface params
+      phi0 = ls_gf->GetValue(Trans, ip);
+      ls_gf-> GetGradient(Trans, dphidx0);
+
+      real_t h = Heaviside::h(dphidx0, Trans);
+      real_t rphi = Heaviside::rphi(phi0,h);
+      real_t Se = Heaviside::sign(rphi);
+      real_t de = Heaviside::dirac(rphi,h);
+
+      f = Se + lambda*de*phi0;
+      k = lambda*de;
+      a.Set(Se/fmax(dphidx.Norml2(),10e-10), dphidx);
+
+      tau = GetTau(k, a, Trans);
 
       // Strong residual
       res = a*dphidx + k*phi - f;
@@ -236,8 +201,9 @@ void StabConvReactIntegrator::AssembleElementVector(const FiniteElement &el,
       elvect.Add(w*res, test);
 
       // Artificial diffusion
-      real_t h = 1.0/fmax(Trans.InverseJacobian().FNorm(), 10e-10);
+      h = 1.0/fmax(Trans.InverseJacobian().FNorm(), 10e-10);
       real_t kdc = 0.25*h*fabs(res)/fmax(dphidx.Norml2(), 10e-10);
+      kdc += 0.01*h;
       dshape.Mult(dphidx, test);
       elvect.Add(w*kdc, test);
 
@@ -251,8 +217,8 @@ void StabConvReactIntegrator::AssembleElementGrad(const FiniteElement &el,
 {
    int nd = el.GetDof();
    int dim = el.GetDim();
-   real_t w,k,f,phi,res,tau;
-   Vector a(dim), dphidx(dim);
+   real_t w,k,f,phi,phi0,res,tau;
+   Vector a(dim), dphidx(dim), dphidx0(dim);
 
    elmat.SetSize(nd);
    shape.SetSize(nd);
@@ -272,12 +238,25 @@ void StabConvReactIntegrator::AssembleElementGrad(const FiniteElement &el,
 
       // Calculate shapes
       el.CalcPhysShape(Trans, shape);
-      el.CalcPhysDShape(Trans, dshape);
+      phi = shape*elfun;
 
-      // Evaluate coefficients
-      f = force->Eval(Trans, ip);
-      k = react->Eval(Trans, ip);
-      adv->Eval(a, Trans, ip);
+      // Calculate shapes
+      el.CalcPhysDShape(Trans, dshape);
+      dshape.MultTranspose(elfun, dphidx);
+
+      // Interface params
+      phi0 = ls_gf->GetValue(Trans, ip);
+      ls_gf-> GetGradient(Trans, dphidx0);
+
+      real_t h = Heaviside::h(dphidx0, Trans);
+      real_t rphi = Heaviside::rphi(phi0,h);
+      real_t Se = Heaviside::sign(rphi);
+      real_t de = Heaviside::dirac(rphi,h);
+
+      f = Se + lambda*de*phi0;
+      k = lambda*de;
+      a.Set(Se/fmax(dphidx.Norml2(),10e-10), dphidx);
+
       tau = GetTau(k, a, Trans);
 
       // Compute trail function
@@ -297,18 +276,18 @@ void StabConvReactIntegrator::AssembleElementGrad(const FiniteElement &el,
       res = a*dphidx + k*phi - f;
 
       // Artificial diffusion
-      real_t h = 1.0/fmax(Trans.InverseJacobian().FNorm(), 10e-10);
+      h = 1.0/fmax(Trans.InverseJacobian().FNorm(), 10e-10);
       real_t kdc = 0.25*h*fabs(res)/fmax(dphidx.Norml2(), 10e-10);
+      kdc += 0.01*h;
       AddMult_a_AAt(w*kdc, dshape, elmat);
    }
 }
 
 ConvectionDistanceSolver::ConvectionDistanceSolver(ParFiniteElementSpace &space,
                                                    real_t lambda)
-   : form(&space), gmres(space.GetComm()),newton_solver(space.GetComm()),
-     a_cf(space.GetParMesh()->Dimension()), k_cf(lambda), f_cf(lambda)
+   : form(&space), gmres(space.GetComm()),newton_solver(space.GetComm())
 {
-   form.AddDomainIntegrator(new StabConvReactIntegrator(&a_cf,&k_cf,&f_cf));
+   form.AddDomainIntegrator(&integrator);
 
    // Set up the preconditioner
    prec = new HypreILU();
@@ -316,7 +295,7 @@ ConvectionDistanceSolver::ConvectionDistanceSolver(ParFiniteElementSpace &space,
    // Set up the Jacobian solver
    gmres.iterative_mode = false;
    gmres.SetRelTol(1e-3);
-   gmres.SetAbsTol(1e-16);
+   //gmres.SetAbsTol(1e-16);
    gmres.SetMaxIter(100);
    gmres.SetPrintLevel(-1);
    gmres.SetPreconditioner(*prec);
@@ -325,7 +304,7 @@ ConvectionDistanceSolver::ConvectionDistanceSolver(ParFiniteElementSpace &space,
    newton_solver.iterative_mode = true;
    newton_solver.SetPrintLevel(1);
    newton_solver.SetRelTol(1e-2);
-   newton_solver.SetAbsTol(1e-16);
+   //newton_solver.SetAbsTol(1e-16);
    newton_solver.SetMaxIter(5);
    newton_solver.SetSolver(gmres);
    newton_solver.SetOperator(form);
@@ -341,9 +320,7 @@ void ConvectionDistanceSolver::ComputeScalarDistance(Coefficient
    GridFunction* ls_gf = const_cast<GridFunction*>(ls_gfcf->GetGridFunction());
    ParGridFunction* ls_pgf = dynamic_cast<ParGridFunction*>(ls_gf);
 
-   a_cf.Set(*ls_pgf, distance);
-   k_cf.Set(*ls_pgf, distance);
-   f_cf.Set(*ls_pgf, distance);
+   integrator.SetZeroLevelSet(*ls_pgf);
 
    Vector zero, sol;
 

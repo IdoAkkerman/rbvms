@@ -30,88 +30,14 @@ public:
    static real_t h(Vector &grad_phi, ElementTransformation &Tr);
    static real_t rphi(real_t &phi, real_t &h);
 
+   static real_t step(real_t &rphi);
+   static real_t sign(real_t &rphi);
+   static real_t dirac(real_t &rphi, real_t &h);
+
    static real_t step(real_t &phi, Vector &grad_phi, ElementTransformation &Tr);
    static real_t sign(real_t &phi, Vector &grad_phi, ElementTransformation &Tr);
    static real_t dirac(real_t &phi, Vector &grad_phi, ElementTransformation &Tr);
 };
-
-class ForceCoefficient : public Coefficient
-{
-private:
-   real_t lambda;
-   real_t phi;
-   Vector grad_phi;
-
-   GridFunction *ls_gf;
-   GridFunction *distance;
-
-public:
-
-   ForceCoefficient(real_t lambda);
-
-   void Set(ParGridFunction &zero_level_set_,
-            ParGridFunction &distance_)
-   {
-      ls_gf = &zero_level_set_;
-      distance = &distance_;
-   }
-
-   virtual real_t Eval(ElementTransformation &T,
-                       const IntegrationPoint &ip) override;
-};
-
-class ReactionCoefficient : public Coefficient
-{
-private:
-   real_t lambda;
-   real_t phi;
-   Vector grad_phi;
-
-   GridFunction *ls_gf;
-   GridFunction *distance;
-
-public:
-
-   ReactionCoefficient(real_t lambda);
-
-   void Set(ParGridFunction &zero_level_set_,
-            ParGridFunction &distance_)
-   {
-      ls_gf = &zero_level_set_;
-      distance = &distance_;
-   }
-
-   virtual real_t Eval(ElementTransformation &T,
-                       const IntegrationPoint &ip) override;
-};
-
-class ConvectionCoefficient : public VectorCoefficient
-{
-private:
-   real_t phi;
-   Vector grad_phi;
-
-   GridFunction *ls_gf;
-   GridFunction *distance;
-
-public:
-
-   ConvectionCoefficient(int dim);
-
-   void Set(ParGridFunction &zero_level_set_,
-            ParGridFunction &distance_)
-   {
-      ls_gf = &zero_level_set_;
-      distance = &distance_;
-   }
-
-   ///  Evaluate the vector coefficient at @a ip.
-   virtual void Eval(Vector &V, ElementTransformation &T,
-                     const IntegrationPoint &ip) override;
-};
-
-
-
 
 /** This Class defines an integrator for stabilized multi-dimensional
     convection-reaction equation.
@@ -122,11 +48,11 @@ public:
 class StabConvReactIntegrator : public NonlinearFormIntegrator
 {
 protected:
-   /// The advection field
-   VectorCoefficient *adv;
+   ///
+   real_t lambda = 100.0;
 
-   /// The reaction parameter and force fields
-   Coefficient *react, *force;
+   /// The function that defines the interface location
+   GridFunction *ls_gf;
 
    /// The stabilization parameter
    real_t GetTau(real_t &k, Vector &a, ElementTransformation &T);
@@ -136,11 +62,14 @@ private:
    DenseMatrix dshape;
 
 public:
-   StabConvReactIntegrator(VectorCoefficient *a,
-                           Coefficient *r,
-                           Coefficient *f);
+   StabConvReactIntegrator(){};
 
-   ~StabConvReactIntegrator();
+   ~StabConvReactIntegrator(){};
+
+   void SetZeroLevelSet(ParGridFunction &zero_level_set)
+   {
+      ls_gf = &zero_level_set;
+   }
 
    virtual void AssembleElementVector(const FiniteElement &el,
                                       ElementTransformation &Tr,
@@ -166,9 +95,10 @@ private:
    ParNonlinearForm form;
    FGMRESSolver gmres;
    NewtonSolver newton_solver;
-   ConvectionCoefficient a_cf;
-   ReactionCoefficient k_cf;
-   ForceCoefficient f_cf;
+  // ConvectionCoefficient a_cf;
+ //  ReactionCoefficient k_cf;
+ //  ForceCoefficient f_cf;
+   StabConvReactIntegrator integrator;
    Solver *prec;
    ParGridFunction phi0_gf, phi_gf;
 
