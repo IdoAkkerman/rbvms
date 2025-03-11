@@ -35,8 +35,6 @@ public:
    static real_t dirac(real_t &phi, Vector &grad_phi, ElementTransformation &Tr);
 };
 
-
-
 class ForceCoefficient : public Coefficient
 {
 private:
@@ -44,17 +42,17 @@ private:
    real_t phi;
    Vector grad_phi;
 
-   Coefficient *ls_cf;
-   ParGridFunction *distance;
+   GridFunction *ls_gf;
+   GridFunction *distance;
 
 public:
 
    ForceCoefficient(real_t lambda);
 
-   void Set(Coefficient &zero_level_set_,
+   void Set(ParGridFunction &zero_level_set_,
             ParGridFunction &distance_)
    {
-      ls_cf = &zero_level_set_;
+      ls_gf = &zero_level_set_;
       distance = &distance_;
    }
 
@@ -69,17 +67,17 @@ private:
    real_t phi;
    Vector grad_phi;
 
-   Coefficient *ls_cf;
-   ParGridFunction *distance;
+   GridFunction *ls_gf;
+   GridFunction *distance;
 
 public:
 
    ReactionCoefficient(real_t lambda);
 
-   void Set(Coefficient &zero_level_set_,
+   void Set(ParGridFunction &zero_level_set_,
             ParGridFunction &distance_)
    {
-      ls_cf = &zero_level_set_;
+      ls_gf = &zero_level_set_;
       distance = &distance_;
    }
 
@@ -93,17 +91,17 @@ private:
    real_t phi;
    Vector grad_phi;
 
-   Coefficient *ls_cf;
-   ParGridFunction *distance;
+   GridFunction *ls_gf;
+   GridFunction *distance;
 
 public:
 
    ConvectionCoefficient(int dim);
 
-   void Set(Coefficient &zero_level_set_,
+   void Set(ParGridFunction &zero_level_set_,
             ParGridFunction &distance_)
    {
-      ls_cf = &zero_level_set_;
+      ls_gf = &zero_level_set_;
       distance = &distance_;
    }
 
