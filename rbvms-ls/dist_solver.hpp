@@ -18,7 +18,9 @@
 using namespace mfem;
 using namespace common;
 
-/// This class manages the interface
+/** This class manages the interface it implements the smooth Heaviside function
+    and derived functions such as the smooth sign and smooth dirac functions.
+*/
 class Heaviside
 {
 public:
@@ -33,17 +35,93 @@ public:
    static real_t dirac(real_t &phi, Vector &grad_phi, ElementTransformation &Tr);
 };
 
+
+
+class ForceCoefficient : public Coefficient
+{
+private:
+   real_t lambda;
+   real_t phi;
+   Vector grad_phi;
+
+   Coefficient *ls_cf;
+   ParGridFunction *distance;
+
+public:
+
+   ForceCoefficient(real_t lambda);
+
+   void Set(Coefficient &zero_level_set_,
+            ParGridFunction &distance_)
+   {
+      ls_cf = &zero_level_set_;
+      distance = &distance_;
+   }
+
+   virtual real_t Eval(ElementTransformation &T,
+                       const IntegrationPoint &ip) override;
+};
+
+class ReactionCoefficient : public Coefficient
+{
+private:
+   real_t lambda;
+   real_t phi;
+   Vector grad_phi;
+
+   Coefficient *ls_cf;
+   ParGridFunction *distance;
+
+public:
+
+   ReactionCoefficient(real_t lambda);
+
+   void Set(Coefficient &zero_level_set_,
+            ParGridFunction &distance_)
+   {
+      ls_cf = &zero_level_set_;
+      distance = &distance_;
+   }
+
+   virtual real_t Eval(ElementTransformation &T,
+                       const IntegrationPoint &ip) override;
+};
+
+class ConvectionCoefficient : public VectorCoefficient
+{
+private:
+   real_t phi;
+   Vector grad_phi;
+
+   Coefficient *ls_cf;
+   ParGridFunction *distance;
+
+public:
+
+   ConvectionCoefficient(int dim);
+
+   void Set(Coefficient &zero_level_set_,
+            ParGridFunction &distance_)
+   {
+      ls_cf = &zero_level_set_;
+      distance = &distance_;
+   }
+
+   ///  Evaluate the vector coefficient at @a ip.
+   virtual void Eval(Vector &V, ElementTransformation &T,
+                     const IntegrationPoint &ip) override;
+};
+
+
+
+
 /** This Class defines an integrator for stabilized multi-dimensional
     convection-reaction equation.
 
-     $(a \cdot \nabla u, v) + (\nabla u, s v)
-    + \sum (a \cdot \nabla u + s u, \tau (a \cdot \nabla v + s v))_e$
-
-     $(f, \nabla v)
-    + \sum (f, \tau (a \cdot \nabla v + s v))_e$
+     $(a \cdot \nabla u, v) + (k u,v)
+    + \sum (a \cdot \nabla u + k u, \tau (a \cdot \nabla v + k v))_e - (f,  v)$
 */
-class StabConvReactIntegrator : public BilinearFormIntegrator,
-   public LinearFormIntegrator
+class StabConvReactIntegrator : public NonlinearFormIntegrator
 {
 protected:
    /// The advection field
@@ -56,7 +134,7 @@ protected:
    real_t GetTau(real_t &k, Vector &a, ElementTransformation &T);
 
 private:
-   Vector shape, adshape, trail, test;
+   Vector shape, trail, test;
    DenseMatrix dshape;
 
 public:
@@ -66,37 +144,53 @@ public:
 
    ~StabConvReactIntegrator();
 
-   virtual void AssembleRHSElementVect(const FiniteElement &el,
-                                       ElementTransformation &Tr,
-                                       Vector &elvect);
-
-   virtual void AssembleElementMatrix(const FiniteElement &el,
+   virtual void AssembleElementVector(const FiniteElement &el,
                                       ElementTransformation &Tr,
-                                      DenseMatrix &elmat);
+                                      const Vector &elfun,
+                                      Vector &elvect) override;
+
+   virtual void AssembleElementGrad(const FiniteElement &el,
+                                    ElementTransformation &Tr,
+                                    const Vector &elfun,
+                                    DenseMatrix &elmat) override;
 
    static const IntegrationRule &GetRule(const FiniteElement &trial_fe,
                                          const FiniteElement &test_fe,
                                          ElementTransformation &Trans);
-
-
-   using LinearFormIntegrator::AssembleRHSElementVect;
 };
 
 
-
-
-
-
-
-
-
-
-//
-//
+/**
+*/
 class ConvectionDistanceSolver : public common::DistanceSolver
 {
+private:
+   ParNonlinearForm form;
+   FGMRESSolver gmres;
+   NewtonSolver newton_solver;
+   ConvectionCoefficient a_cf;
+   ReactionCoefficient k_cf;
+   ForceCoefficient f_cf;
+   Solver *prec;
+   ParGridFunction phi0_gf, phi_gf;
+
 public:
-   ConvectionDistanceSolver() {}
+   ConvectionDistanceSolver(ParFiniteElementSpace &space,
+                            real_t lambda);
+   ~ConvectionDistanceSolver()
+   {
+      delete prec;
+   }
+
+   // Set linear solver parameters
+   void SetLinearRelTol(real_t rtol) { gmres.SetRelTol(rtol); }
+   void SetLinearAbsTol(real_t atol) { gmres.SetAbsTol(atol); }
+   void SetLinearMaxIter(int maxiter) { gmres.SetMaxIter(maxiter); }
+
+   // Set nonlinear solver parameters
+   void SetNonlinearRelTol(real_t rtol) { newton_solver.SetRelTol(rtol); }
+   void SetNonlinearAbsTol(real_t atol) { newton_solver.SetAbsTol(atol); }
+   void SetNonlinearMaxIter(int maxiter) { newton_solver.SetMaxIter(maxiter); }
 
    void ComputeScalarDistance(Coefficient &zero_level_set,
                               ParGridFunction &distance);

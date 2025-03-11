@@ -518,6 +518,19 @@ int main(int argc, char *argv[])
    {
       dist_solver = new NormalizationDistanceSolver;
    }
+   else if (solver_type == 3)
+   {
+      auto ds = new ConvectionDistanceSolver(*spaces[2], 100.0);
+      ds->SetLinearRelTol(1e-4);
+      ds->SetLinearAbsTol(1e-12);
+      ds->SetLinearMaxIter(100);
+
+      ds->SetNonlinearRelTol(1e-4);
+      ds->SetNonlinearAbsTol(1e-12);
+      ds->SetNonlinearMaxIter(10);
+      dist_solver = ds;
+
+   }
    else { MFEM_ABORT("Wrong solver option."); }
    dist_solver->print_level.FirstAndLast().Summary();
 

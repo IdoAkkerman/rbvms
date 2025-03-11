@@ -87,6 +87,49 @@ real_t Heaviside::dirac(real_t &phi, Vector &grad_phi,
    }
 }
 
+ForceCoefficient::ForceCoefficient(real_t l)
+ : lambda(l)
+{
+}
+
+real_t ForceCoefficient::Eval(ElementTransformation &T,
+                              const IntegrationPoint &ip)
+{
+   phi = ls_cf->Eval(T, ip);
+//TBD   ls_cf-> GetGradient(T, grad_phi);
+   return Heaviside::sign(phi, grad_phi, T) + lambda*Heaviside::dirac(phi, grad_phi, T)*phi;
+}
+
+ReactionCoefficient::ReactionCoefficient(real_t l)
+ : lambda(l)
+{
+}
+
+real_t ReactionCoefficient::Eval(ElementTransformation &T,
+                                 const IntegrationPoint &ip)
+{
+   phi = ls_cf->Eval(T, ip);
+ //TBD    ls_cf-> GetGradient(T, grad_phi);
+   return lambda*Heaviside::dirac(phi, grad_phi, T);
+}
+
+ConvectionCoefficient::ConvectionCoefficient(int dim)
+: VectorCoefficient(dim)
+{
+
+}
+
+void ConvectionCoefficient::Eval(Vector &V, ElementTransformation &T,
+                                 const IntegrationPoint &ip)
+{
+   phi = ls_cf->Eval(T, ip);
+//TBD     ls_cf-> GetGradient(T, grad_phi);
+   real_t Se = Heaviside::sign(phi, grad_phi, T);
+   distance-> GetGradient(T, grad_phi);
+   V.Set(Se/grad_phi.Norml2(), grad_phi);
+}
+
+//
 StabConvReactIntegrator::StabConvReactIntegrator(VectorCoefficient *a,
                                                  Coefficient *k,
                                                  Coefficient *f)
@@ -136,23 +179,23 @@ real_t StabConvReactIntegrator::GetTau(real_t &k, Vector &a,
 }
 
 
-void StabConvReactIntegrator::AssembleRHSElementVect(const FiniteElement &el,
-                                                     ElementTransformation &Trans,
-                                                     Vector &elvect)
+void StabConvReactIntegrator::AssembleElementVector(const FiniteElement &el,
+                                                    ElementTransformation &Trans,
+                                                    const Vector &elfun,
+                                                    Vector &elvect)
 {
    int nd = el.GetDof();
    int dim = el.GetDim();
-   real_t w,k,tau,f;
-   Vector a(dim);
+   real_t w,k,tau,f,phi,res;
+   Vector a(dim), dphidx(dim);
 
    elvect.SetSize(nd);
    shape.SetSize(nd);
    dshape.SetSize(nd,dim);
-   adshape.SetSize(nd);
    test.SetSize(nd);
 
-   const IntegrationRule *ir = LinearFormIntegrator::IntRule ?
-                               LinearFormIntegrator::IntRule : &GetRule(el, el, Trans);
+   const IntegrationRule *ir = NonlinearFormIntegrator::IntRule ?
+                               NonlinearFormIntegrator::IntRule : &GetRule(el, el, Trans);
 
    elvect = 0.0;
    for (int i = 0; i < ir->GetNPoints(); i++)
@@ -161,34 +204,38 @@ void StabConvReactIntegrator::AssembleRHSElementVect(const FiniteElement &el,
       Trans.SetIntPoint (&ip);
       w = Trans.Weight() * ip.weight;
 
-      // Calculate shapes
-      el.CalcPhysShape(Trans, shape);
-
       // Evaluate coefficients
       f = force->Eval(Trans, ip);
-
-      // Galerkin term
-      elvect.Add(w*f, shape);
-
-      // Calculate shapes
-      el.CalcPhysDShape(Trans, dshape);
-
-      // Evaluate coefficients
       k = react->Eval(Trans, ip);
       adv->Eval(a, Trans, ip);
       tau = GetTau(k, a, Trans);
 
-      // Advective derivative
-      dshape.Mult(a, adshape);
+      // Calculate shapes
+      el.CalcPhysShape(Trans, shape);
+      phi = shape*elfun;
 
-      // Stablization term
-      elvect.Add(w*f*tau, test);
+      // Calculate shapes
+      el.CalcPhysDShape(Trans, dshape);
+      dshape.MultTranspose(elfun, dphidx);
+
+      // Strong residual
+      res = a*dphidx + k*phi - f;
+
+      // Compute test function
+      dshape.Mult(a, test); // Add Convection stabilization term
+      test.Add(k, shape);   // Add Reaction stabilization term
+      test *= tau;          // Scale stabilization term with parameter
+      test += shape;        // Galerkin term
+
+      // Strong residual
+      elvect.Add(w*res, test);
    }
 }
 
-void StabConvReactIntegrator::AssembleElementMatrix(const FiniteElement &el,
-                                                    ElementTransformation &Trans,
-                                                    DenseMatrix &elmat)
+void StabConvReactIntegrator::AssembleElementGrad(const FiniteElement &el,
+                                                  ElementTransformation &Trans,
+                                                  const Vector &elfun,
+                                                  DenseMatrix &elmat)
 {
    int nd = el.GetDof();
    int dim = el.GetDim();
@@ -198,7 +245,6 @@ void StabConvReactIntegrator::AssembleElementMatrix(const FiniteElement &el,
    elmat.SetSize(nd);
    shape.SetSize(nd);
    dshape.SetSize(nd,dim);
-   adshape.SetSize(nd);
    trail.SetSize(nd);
    test.SetSize(nd);
 
@@ -216,161 +262,60 @@ void StabConvReactIntegrator::AssembleElementMatrix(const FiniteElement &el,
       el.CalcPhysShape(Trans, shape);
       el.CalcPhysDShape(Trans, dshape);
 
-//      real_t phi = sh_p*(*elsol[1]);
-
-
       // Evaluate coefficients
       k = react->Eval(Trans, ip);
       adv->Eval(a, Trans, ip);
-
-      // Galerkin convection term
-      dshape.Mult(a, adshape);
-      AddMult_a_VWt(w, shape, adshape, elmat);
-
-      // Galerkin diffusion term
-      AddMult_a_AAt(w*k, dshape, elmat);
-
-      // Evaluate coefficients
       tau = GetTau(k, a, Trans);
+
+      // Compute trail function
+      dshape.Mult(a, trail); // Add Convection term
+      trail.Add(k, shape);   // Add Reaction term
+
+      // Compute test function
+      test.Set(tau, trail);   // Add stabilization term
+      test += shape;          // Add Galerkin term
 
       // Stablization term
       AddMult_a_VWt(w*tau, test, trail, elmat);
    }
 }
 
+ConvectionDistanceSolver::ConvectionDistanceSolver(ParFiniteElementSpace &space,
+                                                   real_t lambda)
+ : form(&space), gmres(space.GetComm()),newton_solver(space.GetComm()),
+   a_cf(space.GetParMesh()->Dimension()), k_cf(lambda), f_cf(lambda)
+{
+   form.AddDomainIntegrator(new StabConvReactIntegrator(&a_cf,&k_cf,&f_cf));
 
+   // Set up the preconditioner
+   prec = new HypreILU();
 
+   // Set up the Jacobian solver
+   gmres.iterative_mode = false;
+   gmres.SetRelTol(1e-4);
+   gmres.SetAbsTol(1e-12);
+   gmres.SetMaxIter(100);
+   gmres.SetPrintLevel(-1);
+   gmres.SetPreconditioner(*prec);
+
+   // Set up the Newton solver
+   newton_solver.iterative_mode = true;
+   newton_solver.SetPrintLevel(-1);
+   newton_solver.SetRelTol(1e-4);
+   newton_solver.SetAbsTol(1e-12);
+   newton_solver.SetMaxIter(10);
+   newton_solver.SetSolver(gmres);
+}
 
 //
 void ConvectionDistanceSolver::ComputeScalarDistance(Coefficient
                                                      &zero_level_set,
                                                      ParGridFunction &distance)
 {
-   ParFiniteElementSpace &pfes = *distance.ParFESpace();
+   a_cf.Set(zero_level_set, distance);
+   k_cf.Set(zero_level_set, distance);
+   f_cf.Set(zero_level_set, distance);
 
-   auto check_h1 = dynamic_cast<const H1_FECollection *>(pfes.FEColl());
-   MFEM_VERIFY(check_h1 && pfes.GetVDim() == 1,
-               "This solver supports only scalar H1 spaces.");
-
-   // Compute average mesh size (assumes similar cells).
-   ParMesh &pmesh = *pfes.GetParMesh();
-
-   // Step 0 - transform the input level set into a source-type bump.
-   ParGridFunction source(&pfes);
-   source.ProjectCoefficient(zero_level_set);
-
-   /*
-      int amg_print_level = 0;
-
-      // Solver.
-      CGSolver cg(MPI_COMM_WORLD);
-      cg.SetRelTol(1e-12);
-      cg.SetMaxIter(100);
-      cg.SetPrintLevel(print_level);
-      OperatorPtr A;
-      Vector B, X;
-
-      // Step 1 - diffuse.
-      ParGridFunction diffused_source(&pfes);
-      for (int i = 0; i < diffuse_iter; i++)
-      {
-         // Set up RHS.
-         ParLinearForm b(&pfes);
-         GridFunctionCoefficient src_coeff(&source);
-         b.AddDomainIntegrator(new DomainLFIntegrator(src_coeff));
-         b.Assemble();
-
-         // Diffusion and mass terms in the LHS.
-         ParBilinearForm a_d(&pfes);
-         a_d.AddDomainIntegrator(new MassIntegrator);
-         ConstantCoefficient t_coeff(parameter_t);
-         a_d.AddDomainIntegrator(new DiffusionIntegrator(t_coeff));
-         a_d.Assemble();
-
-         // Solve with Dirichlet BC.
-         Array<int> ess_tdof_list;
-         if (pmesh.bdr_attributes.Size())
-         {
-            Array<int> ess_bdr(pmesh.bdr_attributes.Max());
-            ess_bdr = 1;
-            pfes.GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
-         }
-         ParGridFunction u_dirichlet(&pfes);
-         u_dirichlet = 0.0;
-         a_d.FormLinearSystem(ess_tdof_list, u_dirichlet, b, A, X, B);
-         auto *prec = new HypreBoomerAMG;
-         prec->SetPrintLevel(amg_print_level);
-         cg.SetPreconditioner(*prec);
-         cg.SetOperator(*A);
-         cg.Mult(B, X);
-         a_d.RecoverFEMSolution(X, b, u_dirichlet);
-         delete prec;
-
-         // Diffusion and mass terms in the LHS.
-         ParBilinearForm a_n(&pfes);
-         a_n.AddDomainIntegrator(new MassIntegrator);
-         a_n.AddDomainIntegrator(new DiffusionIntegrator(t_coeff));
-         a_n.Assemble();
-
-         // Solve with Neumann BC.
-         ParGridFunction u_neumann(&pfes);
-         ess_tdof_list.DeleteAll();
-         a_n.FormLinearSystem(ess_tdof_list, u_neumann, b, A, X, B);
-         auto *prec2 = new HypreBoomerAMG;
-         prec2->SetPrintLevel(amg_print_level);
-         cg.SetPreconditioner(*prec2);
-         cg.SetOperator(*A);
-         cg.Mult(B, X);
-         a_n.RecoverFEMSolution(X, b, u_neumann);
-         delete prec2;
-
-         for (int ii = 0; ii < diffused_source.Size(); ii++)
-         {
-            // This assumes that the magnitudes of the two solutions are somewhat
-            // similar; otherwise one of the solutions would dominate and the BC
-            // won't look correct. To avoid this, it's good to have the source
-            // away from the boundary (i.e. have more resolution).
-            diffused_source(ii) = 0.5 * (u_neumann(ii) + u_dirichlet(ii));
-         }
-         source = diffused_source;
-      }
-
-      // Step 2 - solve for the distance using the normalized gradient.
-      {
-         // RHS - normalized gradient.
-         ParLinearForm b2(&pfes);
-         NormalizedGradCoefficient grad_u(diffused_source, pmesh.Dimension());
-         b2.AddDomainIntegrator(new DomainLFGradIntegrator(grad_u));
-         b2.Assemble();
-
-         // LHS - diffusion.
-         ParBilinearForm a2(&pfes);
-         a2.AddDomainIntegrator(new DiffusionIntegrator);
-         a2.Assemble();
-
-         // No BC.
-         Array<int> no_ess_tdofs;
-
-         a2.FormLinearSystem(no_ess_tdofs, distance, b2, A, X, B);
-
-         auto *prec = new HypreBoomerAMG;
-         prec->SetPrintLevel(amg_print_level);
-         OrthoSolver ortho(pfes.GetComm());
-         ortho.SetSolver(*prec);
-         cg.SetPreconditioner(ortho);
-         cg.SetOperator(*A);
-         cg.Mult(B, X);
-         a2.RecoverFEMSolution(X, b2, distance);
-         delete prec;
-      }
-
-      // Shift the distance values to have minimum at zero.
-      // Shift the distance to conserve global volume
-      real_t d_min_loc = 0.0;// distance.Min();
-      real_t d_min_glob;
-      MPI_Allreduce(&d_min_loc, &d_min_glob, 1, MPITypeMap<real_t>::mpi_type,
-                    MPI_MIN, pfes.GetComm());
-      distance -= d_min_glob;
-   */
+   Vector zero;
+   newton_solver.Mult(zero, distance);
 }
-
