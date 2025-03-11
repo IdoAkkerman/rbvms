@@ -34,7 +34,7 @@ JacobianPreconditioner::~JacobianPreconditioner()
 {
    for (int i = 0; i < prec.Size(); ++i)
    {
-      if (prec[i]) delete prec[i];
+      if (prec[i]) { delete prec[i]; }
    }
 }
 
