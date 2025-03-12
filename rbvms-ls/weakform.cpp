@@ -6,6 +6,7 @@
 //------------------------------------------------------------------------------
 
 #include "weakform.hpp"
+#include "dist_solver.hpp"
 
 using namespace mfem;
 using namespace RBVMS;
@@ -124,82 +125,22 @@ void IncNavStoIntegrator::GetTauB(real_t &tau_b, real_t &tau_n,
 real_t IncNavStoIntegrator::GetRho(real_t &phi, Vector &grad_phi,
                                    ElementTransformation &Tr)
 {
-   real_t epsilon = 1e-10;
-   real_t eps = 4.0;
    real_t rho0 = 1.0;
    real_t rho1 = 1000.0;
 
-   // Metric tensor
-   MultAtB(Tr.InverseJacobian(),Tr.InverseJacobian(),Gij);
-
-   ///
-   real_t gGg = 0.0;
-   for (int j = 0; j < dim; j++)
-   {
-      real_t gj = grad_phi[j];
-      for (int i = 0; i < dim; i++)
-      {
-         gGg += Gij(i,j)*grad_phi[i]*gj;
-      }
-   }
-   real_t h = grad_phi.Norml2()/sqrt(fmax(gGg, epsilon));
-
-
-   real_t rphi = phi/(eps*h);
-
-   if (rphi < -1.0)
-   {
-      return rho0;
-   }
-   else if (rphi > 1.0)
-   {
-      return rho1;
-   }
-   else
-   {
-      return rho0 + (rho1-rho0)*(1.0 + sin(M_PI*rphi/2))/2;
-   }
+   real_t He = Heaviside::step(phi, grad_phi, Tr);
+   return rho0 + (rho1-rho0)*He;
 }
 
 //
 real_t IncNavStoIntegrator::GetRhoGrad(real_t &phi, Vector &grad_phi,
                                        ElementTransformation &Tr)
 {
-   real_t epsilon = 1e-10;
-   real_t eps = 4.0;
    real_t rho0 = 1.0;
    real_t rho1 = 1000.0;
 
-   // Metric tensor
-   MultAtB(Tr.InverseJacobian(),Tr.InverseJacobian(),Gij);
-
-   ///
-   real_t gGg = 0.0;
-   for (int j = 0; j < dim; j++)
-   {
-      real_t gj = grad_phi[j];
-      for (int i = 0; i < dim; i++)
-      {
-         gGg += Gij(i,j)*grad_phi[i]*gj;
-      }
-   }
-   real_t h = grad_phi.Norml2()/sqrt(fmax(gGg, epsilon));
-
-
-   real_t rphi = phi/(eps*h);
-
-   if (rphi < -1.0)
-   {
-      return 0.0;
-   }
-   else if (rphi > 1.0)
-   {
-      return 0.0;
-   }
-   else
-   {
-      return (rho1-rho0)*cos(M_PI*rphi/2)*M_PI/4;
-   }
+   real_t de = Heaviside::dirac(phi, grad_phi, Tr);
+   return  (rho1-rho0)*de;
 }
 
 // Assemble the element energy
