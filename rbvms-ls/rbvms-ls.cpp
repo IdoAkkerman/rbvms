@@ -453,7 +453,7 @@ int main(int argc, char *argv[])
    FGMRESSolver j_gmres(MPI_COMM_WORLD);
    j_gmres.iterative_mode = false;
    j_gmres.SetRelTol(GMRES_RelTol);
- //  j_gmres.SetAbsTol(1e-12);
+   //  j_gmres.SetAbsTol(1e-12);
    j_gmres.SetMaxIter(GMRES_MaxIter);
    j_gmres.SetPrintLevel(-1);
    j_gmres.SetMonitor(j_monitor);
@@ -468,7 +468,7 @@ int main(int argc, char *argv[])
    newton_solver.SetPrintLevel(-1);
    newton_solver.SetMonitor(newton_monitor);
    newton_solver.SetRelTol(Newton_RelTol);
-  // newton_solver.SetAbsTol(1e-12);
+   // newton_solver.SetAbsTol(1e-12);
    newton_solver.SetMaxIter(Newton_MaxIter );
    newton_solver.SetSolver(j_gmres);
 
@@ -519,13 +519,13 @@ int main(int argc, char *argv[])
 
       auto ds = new ConvectionDistanceSolver(*spaces[2], 100.0);
       ds->SetLinearRelTol(1e-2);
-     // ds->SetLinearAbsTol(1e-12);
+      // ds->SetLinearAbsTol(1e-12);
       ds->SetLinearMaxIter(100);
-     //Solver *prec = new HypreSmoother();//new HypreILU(); MEM LEAK!!!
-     // ds->SetLinearPreconditioner(*prec);
+      //Solver *prec = new HypreSmoother();//new HypreILU(); MEM LEAK!!!
+      // ds->SetLinearPreconditioner(*prec);
 
       ds->SetNonlinearRelTol(1e-2);
-     // ds->SetNonlinearAbsTol(1e-12);
+      // ds->SetNonlinearAbsTol(1e-12);
       ds->SetNonlinearMaxIter(5);
       dist_solver = ds;
 
