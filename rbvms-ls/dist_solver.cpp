@@ -255,20 +255,18 @@ void StabConvReactIntegrator::AssembleElementGrad(const FiniteElement &el,
                                                   const Vector &elfun,
                                                   DenseMatrix &elmat)
 {
-   int nd = el.GetDof();
-   int dim = el.GetDim();
    real_t w,k,f,phi,phi0,res,tau,kdc;
    real_t h,rphi,Se,de;
+
+   SetDim(el.GetDim());
+   int nd = el.GetDof();
 
    elmat.SetSize(nd);
    shape.SetSize(nd);
    dshape.SetSize(nd,dim);
    trail.SetSize(nd);
    test.SetSize(nd);
-   Gij.SetSize(dim);
-   a.SetSize(dim);
-   dphidx.SetSize(dim);
-   dphidx0.SetSize(dim);
+
 
    const IntegrationRule *ir = NonlinearFormIntegrator::IntRule ?
                                NonlinearFormIntegrator::IntRule : &GetRule(el, el, Trans);
