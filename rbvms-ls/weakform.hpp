@@ -23,7 +23,7 @@ class IncNavStoIntegrator
 {
 private:
 
-   // Physical parameters
+   /// Physical coefficients
    Coefficient &c_rho;
    Coefficient &c_mu;
    VectorCoefficient &c_force;
@@ -31,7 +31,19 @@ private:
    Coefficient &c_suction;
    Coefficient &c_blowing;
 
+   real_t rho0 = 1.0;
+   real_t rho1 = 1000.0;
+
    /// Numerical parameters
+   real_t Cd = 6.0;
+   real_t Ct = 1.0;
+   real_t Cb = 12.0;
+   real_t Cn = 10000.0;
+
+   real_t kdc0 = 0.0;
+   real_t kdc1 = 0.1;
+
+   /// Discretization parameters
    real_t dt = -1.0;
    DenseMatrix Gij;
    Vector hn;
@@ -54,18 +66,25 @@ private:
    /// Compute RBVMS stabilisation parameters
    void GetTau(real_t &tau_m, real_t &tau_c, real_t &tau_ls, real_t &cfl2,
                real_t &rho, real_t &mu, Vector &u,
-               ElementTransformation &Tr);
+               DenseMatrix &Gij);
 
    /// Compute Weak Dirichlet stabilisation parameters
    void GetTauB(real_t &tau_b, real_t &tau_n,
                 real_t &mu, Vector &u,
                 Vector &nor,
-                FaceElementTransformations &Tr);
+                DenseMatrix &Gij);
 
-   ///
-   real_t GetRho(real_t &phi, Vector &grad_phi, ElementTransformation &Tr);
-   ///
-   real_t GetRhoGrad(real_t &phi, Vector &grad_phi, ElementTransformation &Tr);
+   /// Compute discontinuity capturing parameters
+   real_t GetKdc(Vector &res,
+                 DenseMatrix &grad_u,
+                 DenseMatrix &Gij);
+
+   /// Compute density
+   real_t GetRho(real_t &phi, Vector &grad_phi, DenseMatrix &Gij);
+
+   /// Compute density gradient
+   real_t GetRhoGrad(real_t &phi, Vector &grad_phi, DenseMatrix &Gij);
+
 public:
    /// Constructor
    IncNavStoIntegrator(Coefficient &rho_,
