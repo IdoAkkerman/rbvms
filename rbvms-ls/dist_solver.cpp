@@ -160,7 +160,7 @@ real_t StabConvReactIntegrator::GetKdc(real_t &res,
                                        Vector &dphidx,
                                        DenseMatrix &Gij)
 {
-   real_t h = 1.0/sqrt(Gij.Trace()/dphidx.Size());
+   real_t h = 1.0/sqrt(Gij.Trace()/Gij.Width());
    return kdc0*h + kdc1*h*fabs(res)/fmax(dphidx.Norml2(), Heaviside::epsilon);
 }
 
