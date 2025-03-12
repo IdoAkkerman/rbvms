@@ -484,8 +484,6 @@ void IncNavStoIntegrator::AssembleElementGrad(
    const IntegrationRule &ir = IntRules.Get(el[0]->GetGeomType(), intorder);
    real_t tau_m, tau_c, tau_ls, cfl2;
 
-   double mu_ad = 0.0;//GetElemArtDiff(el, Tr, elsol, elrate);
-
    for (int i = 0; i < ir.GetNPoints(); ++i)
    {
       const IntegrationPoint &ip = ir.IntPoint(i);
@@ -494,7 +492,6 @@ void IncNavStoIntegrator::AssembleElementGrad(
       MultAtB(Tr.InverseJacobian(),Tr.InverseJacobian(),Gij);
 
       real_t mu = c_mu.Eval(Tr, ip);
-      real_t mu_eff = mu + mu_ad;
 
       el[0]->CalcPhysShape(Tr, sh_u);
       elf_u.MultTranspose(sh_u, u);
@@ -502,9 +499,7 @@ void IncNavStoIntegrator::AssembleElementGrad(
 
       el[0]->CalcPhysDShape(Tr, shg_u);
       MultAtB(elf_u, shg_u, grad_u);
-
       shg_u.Mult(u, ushg_u);
-      // MultAtB(elf_u, shg_u, grad_u);
 
       el[1]->CalcPhysShape(Tr, sh_p);
       real_t p = sh_p*(*elsol[1]);
@@ -870,7 +865,7 @@ void IncNavStoIntegrator
 
    int intorder = 2*el1[0]->GetOrder();
    const IntegrationRule &ir = IntRules.Get(Tr.GetGeometryType(), intorder);
-   real_t tau_b, tau_n;
+   real_t tau_b, tau_n, mu, w, phi,dphidt,rho, un;
    for (int i = 0; i < ir.GetNPoints(); i++)
    {
       const IntegrationPoint &ip = ir.IntPoint(i);
@@ -881,10 +876,10 @@ void IncNavStoIntegrator
       // Access the neighboring element's integration point
       const IntegrationPoint &eip = Tr.GetElement1IntPoint();
 
-      real_t mu = 0.0;//c_mu.Eval(*Tr.Elem1, eip);
+      mu = 0.0;//c_mu.Eval(*Tr.Elem1, eip);
       c_sol.Eval(up, *Tr.Elem1, eip);
 
-      real_t w = ip.weight * Tr.Weight();
+      w = ip.weight * Tr.Weight();
       MultAtB(Tr.Elem1->InverseJacobian(),Tr.Elem1->InverseJacobian(),Gij);
       CalcOrtho(Tr.Jacobian(), nor);
       nor /= nor.Norml2();
@@ -901,7 +896,7 @@ void IncNavStoIntegrator
 
       up -= u;
       up.Neg();
-      real_t un = up*nor;
+      un = up*nor;
 
       el1[0]->CalcPhysDShape(*Tr.Elem1, shg_u);
       MultAtB(elf_u, shg_u, grad_u);
@@ -911,14 +906,14 @@ void IncNavStoIntegrator
       real_t p = sh_p*(*elsol[1]);
 
       el1[2]->CalcPhysShape(*Tr.Elem1, sh_phi);
-      real_t phi = sh_phi*(*elsol[2]);
-      real_t dphidt = sh_phi*(*elrate[2]);
+      phi = sh_phi*(*elsol[2]);
+      dphidt = sh_phi*(*elrate[2]);
 
       el1[2]->CalcPhysDShape(*Tr.Elem1, shg_phi);
       shg_phi.MultTranspose(*elsol[2], grad_phi);
       shg_phi.Mult(u, ushg_phi);
 
-      real_t rho = GetRho(phi, grad_phi, Gij);
+      rho = GetRho(phi, grad_phi, Gij);
 
       GetTauB(tau_b, tau_n, mu, u, nor, Gij);
 
@@ -1011,7 +1006,7 @@ void IncNavStoIntegrator
 
    int intorder = 2*el1[0]->GetOrder();
    const IntegrationRule &ir = IntRules.Get(Tr.GetGeometryType(), intorder);
-   real_t tau_b, tau_n;
+   real_t tau_b, tau_n, mu, w, phi,dphidt,rho;
    for (int i = 0; i < ir.GetNPoints(); i++)
    {
       const IntegrationPoint &ip = ir.IntPoint(i);
@@ -1021,11 +1016,11 @@ void IncNavStoIntegrator
 
       // Access the neighboring element's integration point
       const IntegrationPoint &eip = Tr.GetElement1IntPoint();
-      real_t mu = 0.0;//c_mu.Eval(*Tr.Elem1, eip);
+      mu = 0.0;//c_mu.Eval(*Tr.Elem1, eip);
       CalcOrtho(Tr.Jacobian(), nor);
       nor /= nor.Norml2();
 
-      real_t w = ip.weight * Tr.Weight();
+      w = ip.weight * Tr.Weight();
       MultAtB(Tr.Elem1->InverseJacobian(),Tr.Elem1->InverseJacobian(),Gij);
       el1[0]->CalcPhysShape(*Tr.Elem1, sh_u);
       elf_u.MultTranspose(sh_u, u);
@@ -1035,14 +1030,14 @@ void IncNavStoIntegrator
       el1[1]->CalcPhysShape(*Tr.Elem1, sh_p);
 
       el1[2]->CalcPhysShape(*Tr.Elem1, sh_phi);
-      real_t phi = sh_phi*(*elsol[2]);
-      real_t dphidt = sh_phi*(*elrate[2]);
+      phi = sh_phi*(*elsol[2]);
+      dphidt = sh_phi*(*elrate[2]);
 
       el1[2]->CalcPhysDShape(*Tr.Elem1, shg_phi);
       shg_phi.MultTranspose(*elsol[2], grad_phi);
       shg_phi.Mult(u, ushg_phi);
 
-      real_t rho = GetRho(phi, grad_phi, Gij);
+      rho = GetRho(phi, grad_phi, Gij);
 
       GetTauB(tau_b, tau_n, mu, u, nor, Gij);
 
@@ -1119,7 +1114,6 @@ void IncNavStoIntegrator
          }
       }
 
-
       // Momentum - Pressure block (w,p)
       for (int i_p = 0; i_p < dof_p; ++i_p)
       {
@@ -1133,21 +1127,21 @@ void IncNavStoIntegrator
             }
          }
       }
-      
-            // Continuity - Velocity block (q,u)
-            for (int dim_u = 0; dim_u < dim; ++dim_u)
+
+      // Continuity - Velocity block (q,u)
+      for (int dim_u = 0; dim_u < dim; ++dim_u)
+      {
+         real_t tmp0 = nor(dim_u)*w*dt;
+         for (int j_u = 0; j_u < dof_u; ++j_u)
+         {
+            real_t tmp1 = sh_u(j_u)*tmp0;
+            for (int i_p = 0; i_p < dof_p; ++i_p)
             {
-               real_t tmp0 = nor(dim_u)*w*dt;
-               for (int j_u = 0; j_u < dof_u; ++j_u)
-               {
-                  real_t tmp1 = sh_u(j_u)*tmp0;
-                  for (int i_p = 0; i_p < dof_p; ++i_p)
-                  {
-                     mat_qu(i_p, j_u + dof_u * dim_u) += sh_p(i_p)*tmp1;
-                  }
-               }
+               mat_qu(i_p, j_u + dof_u * dim_u) += sh_p(i_p)*tmp1;
             }
-      
+         }
+      }
+
       // Convection: Momentum - Velocity block (w,u)
       real_t un = u*nor;
       if (un < 0.0) { continue; }

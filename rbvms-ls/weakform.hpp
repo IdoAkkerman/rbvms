@@ -94,6 +94,18 @@ public:
                        Coefficient &suction_,
                        Coefficient &blowing_);
 
+   /// Set densities of the two fluids
+   void SetDensities(real_t r0, real_t r1) { rho0 = r0; rho1 = r1; };
+
+   /// Set tau parameters
+   void SetTauParams(real_t Cd_, real_t Ct_) { Cd = Cd_; Ct = Ct_; };
+
+   /// Set wbc parameters
+   void SetWBCParams(real_t Cb_, real_t Cn_) { Cb = Cb_; Cn = Cn_; };
+
+   /// Set kbc parameters
+   void SetKDCParams(real_t k0, real_t k1) { kdc0 = k0; kdc1 = k1; };
+
    /// Set the timestep size @a dt_
    void SetTimeAndStep(const real_t &t, const real_t &dt_)
    {
