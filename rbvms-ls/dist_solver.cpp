@@ -177,6 +177,49 @@ void StabConvReactIntegrator::SetDim(int d)
    }
 }
 
+// Compute the element energy --> volume in this case
+real_t StabConvReactIntegrator::GetElementEnergy(const FiniteElement &el,
+                                                 ElementTransformation &Trans,
+                                                 const Vector &elfun)
+{
+   real_t w,k,tau,f,phi,phi0,res,kdc;
+   real_t h,rphi,Se,de;
+
+   SetDim(el.GetDim());
+   int nd = el.GetDof();
+
+   shape.SetSize(nd);
+   dshape.SetSize(nd,dim);
+
+   const IntegrationRule *ir = NonlinearFormIntegrator::IntRule ?
+                               NonlinearFormIntegrator::IntRule : &GetRule(el, el, Trans);
+
+   real_t elvol = 0.0;
+   for (int i = 0; i < ir->GetNPoints(); i++)
+   {
+      const IntegrationPoint &ip = ir->IntPoint(i);
+      Trans.SetIntPoint (&ip);
+      w = Trans.Weight() * ip.weight;
+      MultAtB(Trans.InverseJacobian(),Trans.InverseJacobian(),Gij);
+
+      // Calculate shapes
+      el.CalcPhysShape(Trans, shape);
+      phi = shape*elfun;
+
+      // Calculate shapes
+      el.CalcPhysDShape(Trans, dshape);
+      dshape.MultTranspose(elfun, dphidx);
+
+      // Interface params
+      h = Heaviside::h(dphidx, Gij);
+      rphi = Heaviside::rphi(phi,h);
+
+      // Integral
+      elvol += w*Heaviside::step(rphi);
+   }
+   return elvol;
+}
+
 // Compute the element nonlinear residual
 void StabConvReactIntegrator::AssembleElementVector(const FiniteElement &el,
                                                     ElementTransformation &Trans,
@@ -266,7 +309,6 @@ void StabConvReactIntegrator::AssembleElementGrad(const FiniteElement &el,
    dshape.SetSize(nd,dim);
    trail.SetSize(nd);
    test.SetSize(nd);
-
 
    const IntegrationRule *ir = NonlinearFormIntegrator::IntRule ?
                                NonlinearFormIntegrator::IntRule : &GetRule(el, el, Trans);
@@ -365,4 +407,51 @@ void ConvectionDistanceSolver::ComputeScalarDistance(Coefficient
    distance.GetTrueDofs(sol);
    newton_solver.Mult(zero, sol);
    distance.Distribute(sol);
+}
+
+// Shift distance1 to have same volume as distance0
+void ConvectionDistanceSolver::CorrectVolume(ParGridFunction &distance0,
+                                             ParGridFunction &distance1)
+{
+   int iterMax = 10;   // TODO add to args
+   real_t tol = 1e-6; // TODO add to args
+   real_t dd = 1e-4; // TODO add to args
+
+   // Get reference vol
+   real_t vol0 = ComputeVolume(distance0);
+
+   // Get current volume
+   real_t vol1 = ComputeVolume(distance1);
+
+   // Get jacobian
+   real_t jac = ComputeVolumeJac(distance1, dd);
+
+   // Correct
+   for (int it = 0; it < iterMax; it++)
+   {
+      if(Mpi::Root()) std::cout<<vol0<<" "<<vol1<< " "<<vol0-vol1<<std::endl;
+      distance1 -= (vol1 - vol0)/jac;
+      if (fabs(vol1 - vol0) < tol*vol0) break;
+      vol1 = ComputeVolume(distance1);
+   }
+}
+
+
+// Compute volume
+real_t ConvectionDistanceSolver::ComputeVolume(ParGridFunction &distance)
+{
+   integrator.SetZeroLevelSet(&distance);
+   return form.GetEnergy(distance);
+}
+
+// Compute volume jacobian using finite difference
+real_t ConvectionDistanceSolver::ComputeVolumeJac(ParGridFunction &distance,
+                                                  real_t eps)
+{
+   real_t vol0 = ComputeVolume(distance);
+   distance += eps;
+   real_t vol1 = ComputeVolume(distance);
+   distance -= eps;
+
+   return (vol1 - vol0)/eps;
 }

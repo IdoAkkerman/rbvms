@@ -322,6 +322,7 @@ int main(int argc, char *argv[])
    ParGridFunction x_p(spaces[1]);
    ParGridFunction x_phi(spaces[2]);
    ParGridFunction x_dist(spaces[2]);
+   ParGridFunction x_phi0(spaces[2]);
 
    Array<ParGridFunction*> dx_u(nstate);
    Array<ParGridFunction*> dx_p(nstate);
@@ -493,7 +494,7 @@ int main(int argc, char *argv[])
    form.SetSuctionBC(suction_bdr);
    form.SetBlowingBC(blowing_bdr);
 
-   DistanceSolver *dist_solver = NULL;
+  /* DistanceSolver *dist_solver = NULL;
    if (solver_type == 0)
    {
       auto ds = new HeatDistanceSolver(0.01);//t_param * dx * dx);
@@ -529,8 +530,21 @@ int main(int argc, char *argv[])
       ds->SetNonlinearMaxIter(5);
       dist_solver = ds;
 
-   }
-   else { MFEM_ABORT("Wrong solver option."); }
+   }*/
+
+ConvectionDistanceSolver *dist_solver = new ConvectionDistanceSolver(*spaces[2], 100.0);
+      dist_solver->SetLinearRelTol(1e-2);
+      // ds->SetLinearAbsTol(1e-12);
+      dist_solver->SetLinearMaxIter(100);
+      //Solver *prec = new HypreSmoother();//new HypreILU(); MEM LEAK!!!
+      // ds->SetLinearPreconditioner(*prec);
+
+      dist_solver->SetNonlinearRelTol(1e-2);
+      // ds->SetNonlinearAbsTol(1e-12);
+      dist_solver->SetNonlinearMaxIter(5);
+
+
+ //  else { MFEM_ABORT("Wrong solver option."); }
    dist_solver->print_level.FirstAndLast().Summary();
 
 
@@ -599,9 +613,12 @@ int main(int argc, char *argv[])
       GridFunctionCoefficient phi_coeff(&x_phi);
       x_dist = x_phi;
       dist_solver->ComputeScalarDistance(phi_coeff, x_dist);
-      //xp.GetBlock(2) = x_dist;
+
+      x_phi0.Distribute(xp0.GetBlock(2));
+      dist_solver->CorrectVolume(x_phi0, x_dist);
+
       x_dist.GetTrueDofs(xp.GetBlock(2));
-      //    cout<<xp.GetBlock(2).Size()<<" "<<x_dist.Size()<<endl;
+
 
       si++;
 

@@ -120,6 +120,11 @@ public:
       ls_gf = zero_level_set;
    }
 
+   /// Compute the element energy --> volume in this case
+   virtual real_t GetElementEnergy(const FiniteElement &el,
+                                   ElementTransformation &Tr,
+                                   const Vector &elfun) override;
+
    /// Compute the element nonlinear residual
    virtual void AssembleElementVector(const FiniteElement &el,
                                       ElementTransformation &Tr,
@@ -166,6 +171,12 @@ private:
    Solver *prec = nullptr;
    Vector zero, sol;
 
+   // Compute volume
+   real_t ComputeVolume(ParGridFunction &distance);
+
+   // Compute volume jacobian
+   real_t ComputeVolumeJac(ParGridFunction &distance, real_t eps = 1e-8);
+
 public:
    /// Constructor
    ConvectionDistanceSolver(ParFiniteElementSpace &space,
@@ -200,6 +211,10 @@ public:
    // Compute distance field for given level-set
    void ComputeScalarDistance(Coefficient &zero_level_set,
                               ParGridFunction &distance);
+
+   // Shift distance1 to have same volume as distance0
+   void CorrectVolume(ParGridFunction &distance0,
+                      ParGridFunction &distance1);
 };
 
 
