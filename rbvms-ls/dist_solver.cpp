@@ -152,7 +152,7 @@ real_t StabConvReactIntegrator::GetTau(real_t &k, Vector &a, DenseMatrix &Gij)
    }
 
    // Momentum stabilisation parameter
-   return 1.0/sqrt(fmax(tau_i2, 1e-20));
+   return 1.0/fmax(sqrt(tau_i2), Heaviside::epsilon);
 }
 
 // Define convective kdc
@@ -161,7 +161,20 @@ real_t StabConvReactIntegrator::GetKdc(real_t &res,
                                        DenseMatrix &Gij)
 {
    real_t h = 1.0/sqrt(Gij.Trace()/dphidx.Size());
-   return 0.01*h + 0.25*h*fabs(res)/fmax(dphidx.Norml2(), Heaviside::epsilon);
+   return kdc0*h + kdc1*h*fabs(res)/fmax(dphidx.Norml2(), Heaviside::epsilon);
+}
+
+// Set the dimension of temporary variables
+void StabConvReactIntegrator::SetDim(int d)
+{
+   if (dim != d )
+   {
+      dim = d;
+      Gij.SetSize(dim);
+      a.SetSize(dim);
+      dphidx.SetSize(dim);
+      dphidx0.SetSize(dim);
+   }
 }
 
 // Compute the element nonlinear residual
@@ -170,16 +183,16 @@ void StabConvReactIntegrator::AssembleElementVector(const FiniteElement &el,
                                                     const Vector &elfun,
                                                     Vector &elvect)
 {
+   real_t w,k,tau,f,phi,phi0,res,kdc;
+   real_t h,rphi,Se,de;
+
+   SetDim(el.GetDim());
    int nd = el.GetDof();
-   int dim = el.GetDim();
-   real_t w,k,tau,f,phi,phi0,res;
-   Vector a(dim), dphidx(dim), dphidx0(dim);
 
    elvect.SetSize(nd);
    shape.SetSize(nd);
    dshape.SetSize(nd,dim);
    test.SetSize(nd);
-   Gij.SetSize(dim);
 
    const IntegrationRule *ir = NonlinearFormIntegrator::IntRule ?
                                NonlinearFormIntegrator::IntRule : &GetRule(el, el, Trans);
@@ -204,19 +217,22 @@ void StabConvReactIntegrator::AssembleElementVector(const FiniteElement &el,
       phi0 = ls_gf->GetValue(Trans, ip);
       ls_gf-> GetGradient(Trans, dphidx0);
 
-      real_t h = Heaviside::h(dphidx0, Gij);
-      real_t rphi = Heaviside::rphi(phi0,h);
-      real_t Se = Heaviside::sign(rphi);
-      real_t de = Heaviside::dirac(rphi,h);
+      h = Heaviside::h(dphidx0, Gij);
+      rphi = Heaviside::rphi(phi0,h);
+      Se = Heaviside::sign(rphi);
+      de = Heaviside::dirac(rphi,h);
 
+      // Force, reaction and convection parameters
       f = Se + lambda*de*phi0;
       k = lambda*de;
       a.Set(Se/fmax(dphidx.Norml2(),Heaviside::epsilon), dphidx);
 
-      tau = GetTau(k, a, Gij);
-
       // Strong residual
       res = a*dphidx + k*phi - f;
+
+      // Numerical parameters
+      tau = GetTau(k, a, Gij);
+      kdc = GetKdc(res, dphidx, Gij);
 
       // Compute test function
       dshape.Mult(a, test); // Add Convection stabilization term
@@ -228,10 +244,6 @@ void StabConvReactIntegrator::AssembleElementVector(const FiniteElement &el,
       elvect.Add(w*res, test);
 
       // Artificial diffusion
-      //h = 1.0/fmax(Trans.InverseJacobian().FNorm(), 10e-10);
-      //real_t kdc = 0.25*h*fabs(res)/fmax(dphidx.Norml2(), 10e-10);
-      //kdc += 0.01*h;
-      real_t kdc= GetKdc(res, dphidx, Gij);
       dshape.Mult(dphidx, test);
       elvect.Add(w*kdc, test);
    }
@@ -245,8 +257,8 @@ void StabConvReactIntegrator::AssembleElementGrad(const FiniteElement &el,
 {
    int nd = el.GetDof();
    int dim = el.GetDim();
-   real_t w,k,f,phi,phi0,res,tau;
-   Vector a(dim), dphidx(dim), dphidx0(dim);
+   real_t w,k,f,phi,phi0,res,tau,kdc;
+   real_t h,rphi,Se,de;
 
    elmat.SetSize(nd);
    shape.SetSize(nd);
@@ -254,6 +266,9 @@ void StabConvReactIntegrator::AssembleElementGrad(const FiniteElement &el,
    trail.SetSize(nd);
    test.SetSize(nd);
    Gij.SetSize(dim);
+   a.SetSize(dim);
+   dphidx.SetSize(dim);
+   dphidx0.SetSize(dim);
 
    const IntegrationRule *ir = NonlinearFormIntegrator::IntRule ?
                                NonlinearFormIntegrator::IntRule : &GetRule(el, el, Trans);
@@ -278,16 +293,22 @@ void StabConvReactIntegrator::AssembleElementGrad(const FiniteElement &el,
       phi0 = ls_gf->GetValue(Trans, ip);
       ls_gf-> GetGradient(Trans, dphidx0);
 
-      real_t h = Heaviside::h(dphidx0, Gij);
-      real_t rphi = Heaviside::rphi(phi0,h);
-      real_t Se = Heaviside::sign(rphi);
-      real_t de = Heaviside::dirac(rphi,h);
+      h = Heaviside::h(dphidx0, Gij);
+      rphi = Heaviside::rphi(phi0,h);
+      Se = Heaviside::sign(rphi);
+      de = Heaviside::dirac(rphi,h);
 
+      // Force, reaction and convection parameters
       f = Se + lambda*de*phi0;
       k = lambda*de;
-      a.Set(Se/fmax(dphidx.Norml2(),Heaviside::epsilon), dphidx);
+      a.Set(Se/fmax(dphidx.Norml2(), Heaviside::epsilon), dphidx);
 
+      // Strong residual
+      res = a*dphidx + k*phi - f;
+
+      // Numerical parameters
       tau = GetTau(k, a, Gij);
+      kdc = GetKdc(res, dphidx, Gij);
 
       // Compute trail function
       dshape.Mult(a, trail); // Add Convection term
@@ -300,16 +321,7 @@ void StabConvReactIntegrator::AssembleElementGrad(const FiniteElement &el,
       // Stablization term
       AddMult_a_VWt(w, test, trail, elmat);
 
-      // Strong residual
-      phi = shape*elfun;
-      dshape.MultTranspose(elfun, dphidx);
-      res = a*dphidx + k*phi - f;
-
       // Artificial diffusion
-     // h = 1.0/fmax(Trans.InverseJacobian().FNorm(), Heaviside::epsilon);
-     // real_t kdc = 0.25*h*fabs(res)/fmax(dphidx.Norml2(), Heaviside::epsilon);
-      //kdc += 0.01*h;
-      real_t kdc= GetKdc(res, dphidx, Gij);
       AddMult_a_AAt(w*kdc, dshape, elmat);
    }
 }
@@ -341,7 +353,6 @@ ConvectionDistanceSolver::ConvectionDistanceSolver(ParFiniteElementSpace &space,
    newton_solver.SetRelTol(1e-4);
    newton_solver.SetAbsTol(1e-12);
    newton_solver.SetMaxIter(10);
-
 }
 
 // Solver for the distance field given a zero level-set coefficient

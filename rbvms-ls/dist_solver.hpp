@@ -66,8 +66,17 @@ private:
    /// Penalty parameter for pinning the zero level-set
    real_t lambda;
 
+   /// Discontinuity capturing parameter for the inconsistent part
+   real_t kdc0;
+
+   /// Discontinuity capturing parameter for the inconsistent part
+   real_t kdc1;
+
    /// The function that defines the interface location
    const GridFunction *ls_gf;
+
+   /// The stabilization parameter
+   void SetDim(int dim);
 
    /// The stabilization parameter
    real_t GetTau(real_t &k, Vector &a, DenseMatrix &Gij);
@@ -76,18 +85,34 @@ private:
    real_t GetKdc(real_t &res, Vector &dphidx, DenseMatrix &Gij);
 
    /// Temporary variables
+   int dim;
+   Vector a, dphidx, dphidx0;
    Vector shape, trail, test;
    DenseMatrix dshape, Gij;
 
 public:
    /// Constructor
-   StabConvReactIntegrator(real_t l = 1.0){lambda = l;};
+   StabConvReactIntegrator(real_t l = 1.0,
+                           real_t k0 = 0.01,
+                           real_t k1 = 0.25)
+   {
+      lambda = l;
+      kdc0 = k0;
+      kdc1 = k1;
+      dim = -1;
+   };
 
    /// Destructor
-   ~StabConvReactIntegrator(){};
+   ~StabConvReactIntegrator() {};
 
    /// Set the penalty parameter for pinning the zero level-set
-   void SetPenalty(real_t l){lambda = l;};
+   void SetPenalty(real_t l) { lambda = l; };
+
+   /// Set the penalty parameter for pinning the zero level-set
+   void SetInconsistentDC(real_t k0) { kdc0 = k0; };
+
+   /// Set the penalty parameter for pinning the zero level-set
+   void SetConsistentDC(real_t k1) { kdc1 = k1; };
 
    /// Provide the Gridfunction that specifies the zero level-set
    void SetZeroLevelSet(const GridFunction *zero_level_set)
@@ -117,7 +142,7 @@ public:
 /** This Class defines a redistancing algorithm based on convection.
     The convective equation
      $S_{\eps} (\phi_0)\frac{\nabla \phi}{\|\nabla \phi\|} \cdot \nabla \phi
-      + \lambda \delta_{eps}(\phi_0) (\phi-phi_0) 
+      + \lambda \delta_{eps}(\phi_0) (\phi-phi_0)
       = S_{\eps} (\phi_0)$
     is solved using SUPG and Discontinuity capturing.
 */
@@ -149,11 +174,11 @@ public:
    /// Denstructor
    ~ConvectionDistanceSolver()
    {
-       if (prec) delete prec;
+      if (prec) { delete prec; }
    };
 
    // Set linear solver parameters
-   void SetPenalty(real_t lambda){ integrator.SetPenalty(lambda); };
+   void SetPenalty(real_t lambda) { integrator.SetPenalty(lambda); };
 
    // Set linear solver parameters
    void SetLinearRelTol(real_t rtol) { gmres.SetRelTol(rtol); }
@@ -162,9 +187,9 @@ public:
 
    void SetLinearPreconditioner(Solver &pc)
    {
-       if (prec) delete prec;
-       prec = nullptr;
-       gmres.SetPreconditioner(pc);
+      if (prec) { delete prec; }
+      prec = nullptr;
+      gmres.SetPreconditioner(pc);
    }
 
    // Set nonlinear solver parameters
