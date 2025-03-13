@@ -396,27 +396,30 @@ ConvectionDistanceSolver::ConvectionDistanceSolver(ParFiniteElementSpace &space,
 }
 
 // Solver for the distance field given a zero level-set coefficient
-void ConvectionDistanceSolver::ComputeScalarDistance(Coefficient
-                                                     &zero_level_set,
+void ConvectionDistanceSolver::ComputeScalarDistance(ParGridFunction &phi0,
                                                      ParGridFunction &distance)
 {
-   GridFunctionCoefficient* ls_gfcf = dynamic_cast<GridFunctionCoefficient*>
-                                      (&zero_level_set);
-   integrator.SetZeroLevelSet(ls_gfcf->GetGridFunction());
+   integrator.SetZeroLevelSet(&phi0);
 
    distance.GetTrueDofs(sol);
    newton_solver.Mult(zero, sol);
    distance.Distribute(sol);
 }
 
+// Solver for the distance field given a zero level-set coefficient
+void ConvectionDistanceSolver::ComputeScalarDistance(Coefficient &phi0,
+                                                     ParGridFunction &distance)
+{
+   GridFunctionCoefficient* cf = dynamic_cast<GridFunctionCoefficient*> (&phi0);
+   GridFunction* gf = const_cast<GridFunction*>(cf->GetGridFunction());
+   ParGridFunction* phi0_pgf = dynamic_cast<ParGridFunction*>(gf);
+   ComputeScalarDistance(*phi0_pgf, distance);
+}
+
 // Shift distance1 to have same volume as distance0
 void ConvectionDistanceSolver::CorrectVolume(ParGridFunction &distance0,
                                              ParGridFunction &distance1)
 {
-   int iterMax = 10;   // TODO add to args
-   real_t tol = 1e-6; // TODO add to args
-   real_t dd = 1e-4; // TODO add to args
-
    // Get reference vol
    real_t vol0 = ComputeVolume(distance0);
 
@@ -424,18 +427,17 @@ void ConvectionDistanceSolver::CorrectVolume(ParGridFunction &distance0,
    real_t vol1 = ComputeVolume(distance1);
 
    // Get jacobian
-   real_t jac = ComputeVolumeJac(distance1, dd);
+   real_t jac = ComputeVolumeJac(distance1, jacEps_vc);
 
    // Correct
-   for (int it = 0; it < iterMax; it++)
+   for (int it = 0; it < maxIter_vc; it++)
    {
       if(Mpi::Root()) std::cout<<vol0<<" "<<vol1<< " "<<vol0-vol1<<std::endl;
       distance1 -= (vol1 - vol0)/jac;
-      if (fabs(vol1 - vol0) < tol*vol0) break;
+      if (fabs(vol1 - vol0) < relTol_vc*vol0) break;
       vol1 = ComputeVolume(distance1);
    }
 }
-
 
 // Compute volume
 real_t ConvectionDistanceSolver::ComputeVolume(ParGridFunction &distance)

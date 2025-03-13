@@ -171,6 +171,11 @@ private:
    Solver *prec = nullptr;
    Vector zero, sol;
 
+   // Volume conservation solve params
+   int maxIter_vc = 10;
+   real_t relTol_vc = 1e-12;
+   real_t jacEps_vc = 1e-4;
+
    // Compute volume
    real_t ComputeVolume(ParGridFunction &distance);
 
@@ -180,7 +185,7 @@ private:
 public:
    /// Constructor
    ConvectionDistanceSolver(ParFiniteElementSpace &space,
-                            real_t lambda);
+                            real_t lambda = 1.0);
 
    /// Denstructor
    ~ConvectionDistanceSolver()
@@ -188,8 +193,10 @@ public:
       if (prec) { delete prec; }
    };
 
-   // Set linear solver parameters
+   // Set formulation parameters
    void SetPenalty(real_t lambda) { integrator.SetPenalty(lambda); };
+   void SetInconsistentDC(real_t k0) { integrator.SetInconsistentDC(k0); };
+   void SetConsistentDC(real_t k1) { integrator.SetConsistentDC(k1); };
 
    // Set linear solver parameters
    void SetLinearRelTol(real_t rtol) { gmres.SetRelTol(rtol); }
@@ -208,9 +215,17 @@ public:
    void SetNonlinearAbsTol(real_t atol) { newton_solver.SetAbsTol(atol); }
    void SetNonlinearMaxIter(int maxiter) { newton_solver.SetMaxIter(maxiter); }
 
+   // Set volume conservation solver parameters
+   void SetVolumeConservationMaxIter(int im) { maxIter_vc = im; };
+   void SetVolumeConservationRelTol(real_t tol) { relTol_vc = tol; };
+   void SetVolumeConservationJacEps(real_t eps) { jacEps_vc = eps; };
+
    // Compute distance field for given level-set
-   void ComputeScalarDistance(Coefficient &zero_level_set,
-                              ParGridFunction &distance);
+   virtual void ComputeScalarDistance(ParGridFunction &zero_level_set,
+                                      ParGridFunction &distance);
+
+   virtual void ComputeScalarDistance(Coefficient &zero_level_set,
+                                      ParGridFunction &distance) override;
 
    // Shift distance1 to have same volume as distance0
    void CorrectVolume(ParGridFunction &distance0,
