@@ -52,14 +52,14 @@ void CheckBoundaries(Array<bool> &bnd_flags,
 
 int main(int argc, char *argv[])
 {
-   // 1. Initialize MPI and HYPRE and print info
+   // Initialize MPI and HYPRE and print info
    Mpi::Init(argc, argv);
    int num_procs = Mpi::WorldSize();
    int myid = Mpi::WorldRank();
    Hypre::Init();
    printInfo();
 
-   // 2. Parse command-line options.
+   // Parse command-line options.
    OptionsParser args(argc, argv);
 
    // Mesh and discretization parameters
@@ -139,7 +139,7 @@ int main(int argc, char *argv[])
    args.AddOption(&dt_gain, "-dtg", "--dt-gain",
                   "Gain coefficient for time step adjustment.");
 
-   // Solver parameters
+   // RBVMS Solver parameters
    double GMRES_RelTol = 1e-3;
    int    GMRES_MaxIter = 500;
    double Newton_RelTol = 1e-3;
@@ -153,6 +153,48 @@ int main(int argc, char *argv[])
                   "Relative tolerance for the Newton solver.");
    args.AddOption(&Newton_MaxIter, "-ni", "--newton-itermax",
                   "Maximum iteration count for the Newton solver.");
+
+   // Redistancing formulation parameters
+   real_t Redist_Lambda = 1.0;
+   real_t Redist_kdc0 = 0.01;
+   real_t Redist_kdc1 = 0.25;
+
+   args.AddOption(&Redist_Lambda, "-rl", "--redist-penalty",
+                  "Interface pinning penalty of the Redistancing formulation.");
+
+   args.AddOption(&Redist_kdc0, "-rk0", "--redist-kdc0",
+                  "Inconsistent diffusion parameter of Redistancing formulation.");
+
+   args.AddOption(&Redist_kdc1, "-rk1", "--redist-kdc1",
+                  "Consistent diffusion parameter of Redistancing formulation.");
+
+   // Redistancing solver parameters
+   real_t Redist_GMRES_RelTol = 1e-2;
+   int Redist_GMRES_MaxIter = 100;
+   real_t Redist_Newton_RelTol = 1e-2;
+   int Redist_Newton_MaxIter = 5;
+
+   args.AddOption(&Redist_GMRES_RelTol, "-rlt", "--redist-linear-tolerance",
+                  "Relative tolerance for the Redistancing GMRES solver.");
+   args.AddOption(&Redist_GMRES_MaxIter, "-rli", "--redist-linear-itermax",
+                  "Maximum iteration count for the Redistancing GMRES solver.");
+   args.AddOption(&Redist_Newton_RelTol, "-rnt", "--redist-newton-tolerance",
+                  "Relative tolerance for the Redistancing Newton solver.");
+   args.AddOption(&Redist_Newton_MaxIter, "-rni", "--redist-newton-itermax",
+                  "Maximum iteration count for the Redistancing Newton solver.");
+
+   // Volume conservation solver parameters
+   int VolCons_MaxIter = 10;
+   real_t VolCons_RelTol = 1e-12;
+   real_t VolCons_JacEps = 1e-6;
+
+   args.AddOption(&VolCons_MaxIter, "-vci", "--volcons-newton-itermax",
+                  "Maximum iteration count for the volume conservation solver.");
+   args.AddOption(&VolCons_RelTol, "-vct", "--volcons-newton-tolerance",
+                  "Relative tolerance for the volume conservation solver.");
+   args.AddOption(&VolCons_JacEps, "-vce", "--volcons-jac-eps",
+                  "Finite-difference pertubation for obtaining the jacobian\n"
+                  "for the volume conservation solver.");
 
    // Solution input/output params
    bool restart = false;
@@ -169,12 +211,6 @@ int main(int argc, char *argv[])
    args.AddOption(&vis_dir, "-vd", "--vis-dir",
                   "Directory for visualization files.\n\t");
 
-   //
-   int solver_type = 0;
-
-   args.AddOption(&solver_type, "-dist", "--distance-solver",
-                  "Redistancing solver type.");
-
    // Parse parameters
    args.Parse();
    if (!args.Good())
@@ -184,7 +220,7 @@ int main(int argc, char *argv[])
    }
    if (Mpi::Root()) { args.PrintOptions(cout); }
 
-   // 3. Read the mesh from the given mesh file.
+   // Read the mesh from the given mesh file.
    Mesh mesh(mesh_file, 1, 1);
    int dim = mesh.Dimension();
 
@@ -250,7 +286,7 @@ int main(int argc, char *argv[])
                  "Time integrator can have a maximum of one statevector.");
    }
 
-   // 4. Define a finite element space on the mesh.
+   // Define a finite element space on the mesh.
    Array<FiniteElementCollection *> fecs(3);
    fecs[0] = FECollection::NewH1(order, dim, pmesh.IsNURBS());
    fecs[1] = FECollection::NewH1(order, dim, pmesh.IsNURBS());
@@ -309,9 +345,7 @@ int main(int argc, char *argv[])
    bOffsets[3] = spaces[2]->TrueVSize();
    bOffsets.PartialSum();
 
-   // 5. Define the time stepping algorithm
-
-   // 6. Define the solution vector, grid function and output
+   // Define the solution vector, grid function and output
    BlockVector xp(bOffsets);
    BlockVector dxp(bOffsets);
    BlockVector xp0(bOffsets);
@@ -321,8 +355,7 @@ int main(int argc, char *argv[])
    ParGridFunction x_u(spaces[0]);
    ParGridFunction x_p(spaces[1]);
    ParGridFunction x_phi(spaces[2]);
-   ParGridFunction x_dist(spaces[2]);
-   ParGridFunction x_phi0(spaces[2]);
+   ParGridFunction x_ref(spaces[2]);
 
    Array<ParGridFunction*> dx_u(nstate);
    Array<ParGridFunction*> dx_p(nstate);
@@ -341,7 +374,6 @@ int main(int argc, char *argv[])
    vdc.RegisterField("u", &x_u);
    vdc.RegisterField("p", &x_p);
    vdc.RegisterField("phi", &x_phi);
-   vdc.RegisterField("dist", &x_dist);
 
    // Define the restart output
    VisItDataCollection rdc("step", &pmesh);
@@ -407,7 +439,7 @@ int main(int argc, char *argv[])
       x_u.ProjectCoefficient(sol_u);
       x_p = 0.0;
       x_phi.ProjectCoefficient(sol_phi);
-      x_dist = 0.0;
+
       x_u.GetTrueDofs(xp.GetBlock(0));
       x_p.GetTrueDofs(xp.GetBlock(1));
       x_phi.GetTrueDofs(xp.GetBlock(2));
@@ -451,14 +483,13 @@ int main(int argc, char *argv[])
 
    // Set up the Jacobian solver
    RBVMS::GeneralResidualMonitor j_monitor(MPI_COMM_WORLD,"\t\tFGMRES", 10);
-   FGMRESSolver j_gmres(MPI_COMM_WORLD);
-   j_gmres.iterative_mode = false;
-   j_gmres.SetRelTol(GMRES_RelTol);
-   //  j_gmres.SetAbsTol(1e-12);
-   j_gmres.SetMaxIter(GMRES_MaxIter);
-   j_gmres.SetPrintLevel(-1);
-   j_gmres.SetMonitor(j_monitor);
-   j_gmres.SetPreconditioner(jac_prec);
+   FGMRESSolver gmres(MPI_COMM_WORLD);
+   gmres.iterative_mode = false;
+   gmres.SetRelTol(GMRES_RelTol);
+   gmres.SetMaxIter(GMRES_MaxIter);
+   gmres.SetPrintLevel(-1);
+   gmres.SetMonitor(j_monitor);
+   gmres.SetPreconditioner(jac_prec);
 
    // Set up the Newton solver
    RBVMS::SystemResidualMonitor newton_monitor(MPI_COMM_WORLD,
@@ -469,9 +500,8 @@ int main(int argc, char *argv[])
    newton_solver.SetPrintLevel(-1);
    newton_solver.SetMonitor(newton_monitor);
    newton_solver.SetRelTol(Newton_RelTol);
-   // newton_solver.SetAbsTol(1e-12);
-   newton_solver.SetMaxIter(Newton_MaxIter );
-   newton_solver.SetSolver(j_gmres);
+   newton_solver.SetMaxIter(Newton_MaxIter);
+   newton_solver.SetSolver(gmres);
 
    // Define the physical parameters
    LibCoefficient rho(lib_file, "rho", false, rho_param);
@@ -494,70 +524,19 @@ int main(int argc, char *argv[])
    form.SetSuctionBC(suction_bdr);
    form.SetBlowingBC(blowing_bdr);
 
-  /* DistanceSolver *dist_solver = NULL;
-   if (solver_type == 0)
-   {
-      auto ds = new HeatDistanceSolver(0.01);//t_param * dx * dx);
-      //ds->transform = false;
-      ds->smooth_steps = 25;//smooth_steps;
-      ds->vis_glvis = false;
-      dist_solver = ds;
-   }
-   else if (solver_type == 1)
-   {
-      const int p = 10;
-      const int newton_iter = 50;
-      dist_solver = new PLapDistanceSolver(p, newton_iter);
-   }
-   else if (solver_type == 2)
-   {
-      dist_solver = new NormalizationDistanceSolver;
-   }
-   else if (solver_type == 3)
-   {
-      Heaviside::epsilon = 1e-10;
-      Heaviside::eps = 2.0;
+   ConvectionDistanceSolver dist_solver(*spaces[2]);
+   dist_solver.SetPenalty(Redist_Lambda);
+   dist_solver.SetInconsistentDC(Redist_kdc0);
+   dist_solver.SetConsistentDC(Redist_kdc1);
 
-      auto ds = new ConvectionDistanceSolver(*spaces[2], 100.0);
-      ds->SetLinearRelTol(1e-2);
-      // ds->SetLinearAbsTol(1e-12);
-      ds->SetLinearMaxIter(100);
-      //Solver *prec = new HypreSmoother();//new HypreILU(); MEM LEAK!!!
-      // ds->SetLinearPreconditioner(*prec);
+   dist_solver.SetLinearRelTol(Redist_GMRES_RelTol);
+   dist_solver.SetLinearMaxIter(Redist_GMRES_MaxIter);
+   dist_solver.SetNonlinearRelTol(Redist_Newton_RelTol);
+   dist_solver.SetNonlinearMaxIter(Redist_Newton_MaxIter);
 
-      ds->SetNonlinearRelTol(1e-2);
-      // ds->SetNonlinearAbsTol(1e-12);
-      ds->SetNonlinearMaxIter(5);
-      dist_solver = ds;
-
-   }*/
-
-ConvectionDistanceSolver *dist_solver = new ConvectionDistanceSolver(*spaces[2], 100.0);
-      dist_solver->SetLinearRelTol(1e-2);
-      // ds->SetLinearAbsTol(1e-12);
-      dist_solver->SetLinearMaxIter(100);
-      //Solver *prec = new HypreSmoother();//new HypreILU(); MEM LEAK!!!
-      // ds->SetLinearPreconditioner(*prec);
-
-      dist_solver->SetNonlinearRelTol(1e-2);
-      // ds->SetNonlinearAbsTol(1e-12);
-      dist_solver->SetNonlinearMaxIter(5);
-
-
- //  else { MFEM_ABORT("Wrong solver option."); }
-   dist_solver->print_level.FirstAndLast().Summary();
-
-
-
-
-
-
-   GridFunctionCoefficient phi_coeff(&x_phi);
-
-
-
-
-
+   dist_solver.SetVolumeConservationMaxIter(VolCons_MaxIter);
+   dist_solver.SetVolumeConservationRelTol(VolCons_RelTol);
+   dist_solver.SetVolumeConservationJacEps(VolCons_JacEps);
 
    // 7. Actual time integration
 
@@ -606,19 +585,15 @@ ConvectionDistanceSolver *dist_solver = new ConvectionDistanceSolver(*spaces[2],
 
       // Actual time step
       xp0 = xp;
-
       ode_solver->Step(xp, t, dt);
 
-      x_phi.Distribute(xp.GetBlock(2));
-      GridFunctionCoefficient phi_coeff(&x_phi);
-      x_dist = x_phi;
-      dist_solver->ComputeScalarDistance(phi_coeff, x_dist);
+      x_ref.Distribute(xp.GetBlock(2));
+      x_phi = x_ref;
+      dist_solver.ComputeScalarDistance(x_ref, x_phi);
 
-      x_phi0.Distribute(xp0.GetBlock(2));
-      dist_solver->CorrectVolume(x_phi0, x_dist);
-
-      x_dist.GetTrueDofs(xp.GetBlock(2));
-
+      x_ref.Distribute(xp0.GetBlock(2));
+      dist_solver.CorrectVolume(x_ref, x_phi);
+      x_phi.GetTrueDofs(xp.GetBlock(2));
 
       si++;
 
@@ -784,4 +759,3 @@ ConvectionDistanceSolver *dist_solver = new ConvectionDistanceSolver(*spaces[2],
 
    return 0;
 }
-
