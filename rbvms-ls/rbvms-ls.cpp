@@ -468,7 +468,6 @@ int main(int argc, char *argv[])
    Solver* pc_cont = nullptr;
    Solver* pc_ls   = nullptr;
 
-   HypreSmoother* hs_mom = new HypreSmoother();
    HypreILU* ilu_mom = new HypreILU();
    HypreILU* ilu_cont = new HypreILU();
    HypreILU* ilu_ls = new HypreILU();
@@ -537,8 +536,6 @@ int main(int argc, char *argv[])
    dist_solver.SetVolumeConservationMaxIter(VolCons_MaxIter);
    dist_solver.SetVolumeConservationRelTol(VolCons_RelTol);
    dist_solver.SetVolumeConservationJacEps(VolCons_JacEps);
-
-   // 7. Actual time integration
 
    // Open output file
    std::ofstream os;
@@ -747,7 +744,7 @@ int main(int argc, char *argv[])
    }
    os.close();
 
-   // 8. Free the used memory.
+   // Free the used memory.
    for (int i = 0; i < fecs.Size(); ++i)
    {
       delete fecs[i];
