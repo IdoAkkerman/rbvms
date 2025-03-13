@@ -44,7 +44,7 @@ set(HEADERS
 # Create header
 #-------------------------------------------------------------------------------
 get_filename_component(tmp1 ${MFEM_DIR} REALPATH)
-get_filename_component(tmp2 ${PROJECT_BINARY_DIR}/../mfem REALPATH)
+get_filename_component(tmp2 ${PROJECT_BINARY_DIR} REALPATH)
 
 if (${tmp1} STREQUAL ${tmp2})
   message(STATUS "Report RBVMS-LS, MFEM and hypre in build info.")
@@ -68,20 +68,10 @@ endif()
 #-------------------------------------------------------------------------------
 # Add mfem
 #-------------------------------------------------------------------------------
-set(mfem_DIR ${MFEM_DIR})
+set(mfem_DIR ${MFEM_DIR}/mfem)
 find_package(mfem NAMES MFEM)
 
 message(STATUS "Found mfem: in ${MFEM_DIR} (version ${MFEM_VERSION})")
-
-# Add mfem common
-add_library(mfem-common STATIC IMPORTED GLOBAL)
-set_property(TARGET mfem-common PROPERTY
-             IMPORTED_LOCATION "${MFEM_DIR}/miniapps/common/libmfem-common.a")
-
-set_property(TARGET mfem-common PROPERTY
-             INCLUDE_DIRECTORIES "${MFEM_DIR}/../../mfem/miniapps/common")
-
-list(PREPEND  MFEM_LIBRARIES mfem-common)
 
 # Add mfem common
 message("MFEM_CXX_FLAGS = ${MFEM_CXX_FLAGS}")
@@ -96,4 +86,3 @@ add_executable(rbvms-ls rbvms-ls.cpp ${SOURCES} ${HEADERS})
 target_link_libraries(rbvms-ls PRIVATE ${MFEM_LIBRARIES} ${CMAKE_DL_LIBS})
 
 install(TARGETS rbvms-ls DESTINATION bin)
-

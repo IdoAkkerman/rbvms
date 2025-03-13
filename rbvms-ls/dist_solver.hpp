@@ -13,10 +13,8 @@
 #define RBVMS_DIST_SOLVER_HPP
 
 #include "mfem.hpp"
-#include "miniapps/common/mfem-common.hpp"
 
 using namespace mfem;
-using namespace common;
 
 /** This class manages the smooth interface functions,
     such as the smooth heaviside, smooth sign and smooth dirac functions.*/
@@ -151,7 +149,10 @@ public:
       = S_{\eps} (\phi_0)$
     is solved using SUPG and Discontinuity capturing.
 */
-class ConvectionDistanceSolver : public common::DistanceSolver
+class ConvectionDistanceSolver
+// : public common::DistanceSolver
+// This class could derive from DistanceSolver
+// To avoid compile issues this is a stand alone class here
 {
 private:
    /// Abstract nonlinear formulation
@@ -187,7 +188,7 @@ public:
    ConvectionDistanceSolver(ParFiniteElementSpace &space,
                             real_t lambda = 1.0);
 
-   /// Denstructor
+   /// Destructor
    ~ConvectionDistanceSolver()
    {
       if (prec) { delete prec; }
@@ -221,11 +222,11 @@ public:
    void SetVolumeConservationJacEps(real_t eps) { jacEps_vc = eps; };
 
    // Compute distance field for given level-set
-   virtual void ComputeScalarDistance(ParGridFunction &zero_level_set,
-                                      ParGridFunction &distance);
+   void ComputeScalarDistance(ParGridFunction &zero_level_set,
+                              ParGridFunction &distance);
 
-   virtual void ComputeScalarDistance(Coefficient &zero_level_set,
-                                      ParGridFunction &distance) override;
+   void ComputeScalarDistance(Coefficient &zero_level_set,
+                              ParGridFunction &distance);
 
    // Shift distance1 to have same volume as distance0
    void CorrectVolume(ParGridFunction &distance0,
