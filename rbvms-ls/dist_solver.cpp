@@ -371,6 +371,7 @@ ConvectionDistanceSolver::ConvectionDistanceSolver(ParFiniteElementSpace &space,
    : form(&space), gmres(space.GetComm()),newton_solver(space.GetComm())
 {
    form.AddDomainIntegrator(&integrator);
+   form.UseExternalIntegrators();
 
    // Set up the Jacobian solver
    gmres.iterative_mode = false;
