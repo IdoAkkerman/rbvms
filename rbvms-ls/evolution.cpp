@@ -388,6 +388,7 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
       delete vdofs[s];
       delete el_y[s];
       delete el_x[s];
+      delete el_dx[s];
    }
 
    by.SyncFromBlocks();
@@ -723,6 +724,7 @@ void ParTimeDepBlockNonlinForm
       delete vdofs2[i];
       delete vdofs[i];
       delete el_x[i];
+      delete el_dx[i];
    }
 
 }
