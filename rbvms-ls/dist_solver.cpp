@@ -6,6 +6,7 @@
 //------------------------------------------------------------------------------
 
 #include "dist_solver.hpp"
+#include "monitor.hpp"
 
 using namespace mfem;
 
@@ -385,10 +386,12 @@ ConvectionDistanceSolver::ConvectionDistanceSolver(ParFiniteElementSpace &space,
    gmres.SetPreconditioner(*prec);
 
    // Set up the Newton solver
+   RBVMS::GeneralResidualMonitor *newton_monitor = new RBVMS::GeneralResidualMonitor(space.GetComm()," - Redistance", 1);
    newton_solver.iterative_mode = true;
-   newton_solver.SetPrintLevel(1);
+   newton_solver.SetPrintLevel(-1);
    newton_solver.SetSolver(gmres);
    newton_solver.SetOperator(form);
+   newton_solver.SetMonitor(*newton_monitor);
 
    // Default values
    newton_solver.SetRelTol(1e-4);
@@ -430,10 +433,34 @@ void ConvectionDistanceSolver::CorrectVolume(ParGridFunction &distance0,
    // Get jacobian
    real_t jac = ComputeVolumeJac(distance1, jacEps_vc);
 
+   // Print header
+   if(Mpi::Root())
+   {
+      mfem::out<<"\n Volume conservation \n"
+               <<std::setw(6) <<" Iter"
+               <<std::setw(10)<<" Volume"
+               <<std::setw(10)<<" |V-V0|"
+               <<std::setw(12)<<" |V-V0|/|V0|"
+               <<std::setw(10)<<" |dphi|"<<std::endl;
+   }
    // Correct
    for (int it = 0; it < maxIter_vc; it++)
    {
-      if(Mpi::Root()) std::cout<<vol0<<" "<<vol1<< " "<<vol0-vol1<<std::endl;
+      // Print convergence info
+      if(Mpi::Root())
+      {
+         mfem::out<<std::setw(6)<<it
+                  <<std::setw(10)<<std::defaultfloat<<std::setprecision(4)
+                  <<vol1
+                  <<std::setw(10)<<std::defaultfloat<<std::setprecision(2)
+                  <<fabs(vol1 - vol0)
+                  <<std::setw(12)<<std::defaultfloat<<std::setprecision(2)
+                  <<fabs((vol1 - vol0)/vol0)
+                  <<std::setw(10)<<std::defaultfloat<<std::setprecision(2)
+                  <<fabs((vol1 - vol0)/jac)<<std::endl;
+      }
+
+      // Correct, check and recompute
       distance1 -= (vol1 - vol0)/jac;
       if (fabs(vol1 - vol0) < relTol_vc*vol0) break;
       vol1 = ComputeVolume(distance1);

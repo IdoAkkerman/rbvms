@@ -33,7 +33,7 @@ void Evolution::ImplicitSolve(const real_t dt,
    if (Mpi::Root())
    {
       std::cout<<"\n\tTotal # Newton iterations = "
-               <<solver.GetNumIterations()<<endl;
+               <<solver.GetNumIterations()<<"\n\n";
    }
 }
 
