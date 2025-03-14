@@ -20,7 +20,6 @@
 #include "precon.hpp"
 #include "monitor.hpp"
 #include "dist_solver.hpp"
-//#include "mfem-common.hpp"
 
 #include <sys/stat.h>
 
@@ -169,9 +168,9 @@ int main(int argc, char *argv[])
                   "Consistent diffusion parameter of Redistancing formulation.");
 
    // Redistancing solver parameters
-   real_t Redist_GMRES_RelTol = 1e-2;
+   real_t Redist_GMRES_RelTol = 1e-3;
    int Redist_GMRES_MaxIter = 100;
-   real_t Redist_Newton_RelTol = 1e-2;
+   real_t Redist_Newton_RelTol = 1e-3;
    int Redist_Newton_MaxIter = 5;
 
    args.AddOption(&Redist_GMRES_RelTol, "-rlt", "--redist-linear-tolerance",
