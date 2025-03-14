@@ -215,6 +215,11 @@ public:
    void SetNonlinearRelTol(real_t rtol) { newton_solver.SetRelTol(rtol); }
    void SetNonlinearAbsTol(real_t atol) { newton_solver.SetAbsTol(atol); }
    void SetNonlinearMaxIter(int maxiter) { newton_solver.SetMaxIter(maxiter); }
+   void SetNonlinearMonitor(IterativeSolverMonitor& monitor)
+   {
+      newton_solver.SetPrintLevel(-1);
+      newton_solver.SetMonitor(monitor);
+   }
 
    // Set volume conservation solver parameters
    void SetVolumeConservationMaxIter(int im) { maxIter_vc = im; };

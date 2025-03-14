@@ -6,7 +6,6 @@
 //------------------------------------------------------------------------------
 
 #include "dist_solver.hpp"
-#include "monitor.hpp"
 
 using namespace mfem;
 
@@ -386,12 +385,10 @@ ConvectionDistanceSolver::ConvectionDistanceSolver(ParFiniteElementSpace &space,
    gmres.SetPreconditioner(*prec);
 
    // Set up the Newton solver
-   RBVMS::GeneralResidualMonitor *newton_monitor = new RBVMS::GeneralResidualMonitor(space.GetComm()," - Redistance", 1);
    newton_solver.iterative_mode = true;
-   newton_solver.SetPrintLevel(-1);
+   newton_solver.SetPrintLevel(1);
    newton_solver.SetSolver(gmres);
    newton_solver.SetOperator(form);
-   newton_solver.SetMonitor(*newton_monitor);
 
    // Default values
    newton_solver.SetRelTol(1e-4);
