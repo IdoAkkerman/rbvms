@@ -15,6 +15,11 @@ void sol_u(double *coord, int dim, double time, double *u, int vdim)
    u[0] = 0.0;
    u[1] = 0.0;
 }
+double sol_p(double *coord, int dim, double time)
+{
+   return 0.0;
+}
+
 
 double sol_phi(double *coord, int dim, double time)
 {
@@ -33,6 +38,6 @@ void force(double *coord, int dim, double time, double *force, int vdim)
 
 double mu(double *coord, int dim, double time)
 {
-   return 0.1;
+   return 0.01;
 }
 
