@@ -17,6 +17,12 @@ void sol_u(double *coord, int dim, double time, double *u, int vdim)
    u[2] = 0.0;
 }
 
+double sol_p(double *coord, int dim, double time)
+{
+   return 0;
+}
+
+
 double sol_phi(double *coord, int dim, double time)
 {
    double x = coord[0] - 1.0;
