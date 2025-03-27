@@ -27,28 +27,21 @@ private:
    Array<int> &bOffsets;
    int nvar;
 
-   Vector Norms(const Vector &r) const;
+   // Compute the norms for each component
+   void Norms(const Vector &r,Vector& norm) const;
 
 public:
-   NewtonSystemSolver(Array<int> &offsets) : bOffsets(offsets)
-   {
-      nvar = bOffsets.Size()-1;
-   }
-
-#ifdef MFEM_USE_MPI
+   // Constructor, provide MPI context and component subdivision
    NewtonSystemSolver(MPI_Comm comm_, Array<int> &offsets)
       : NewtonSolver(comm_), bOffsets(offsets) 
    {
       nvar = bOffsets.Size()-1;
    }
-#endif
 
    /// Solve the nonlinear system with right-hand side @a b.
    /** If `b.Size() != Height()`, then @a b is assumed to be zero. */
    virtual void Mult(const Vector &b, Vector &x) const;
-
 };
-
 
 // Predefine class
 class ParTimeDepBlockNonlinForm;
@@ -76,6 +69,9 @@ public:
                               const Vector &x,
                               Vector &k) override;
 
+   /// Get the energy
+   Vector GetEnergy() const;
+
    /// Get the CFL Number
    real_t GetCFL() const;
 
@@ -83,7 +79,7 @@ public:
    real_t GetOutflow() const;
 
    /// Get the Force on each of the boundaries
-   DenseMatrix GetForce();
+   DenseMatrix GetForce() const;
 
    /// Destructor
    ~Evolution() {}
@@ -105,6 +101,7 @@ private:
    real_t dt;
    mutable real_t cfl, outflow;
 
+   /// Boundary parameters
    Array<int> strongBCBdr;
    Array<int> weakBCBdr;
    Array<int> normalBCBdr;
@@ -151,8 +148,8 @@ public:
    /// Get the conservative boundary forces
    DenseMatrix& GetForce() { return bdrForce;};
 
-   /// Specialized version of GetEnergy() for BlockVectors
-   //real_t GetEnergyBlocked(const BlockVector &bx) const;
+   /// Block T-Vector to Vector
+   void Energy(const Vector &x, Vector &energy) const;
 
    /// Block T-Vector to Block T-Vector
    void Mult(const Vector &x, Vector &y) const;

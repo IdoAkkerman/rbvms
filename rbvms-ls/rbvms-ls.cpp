@@ -29,6 +29,8 @@ using namespace mfem;
 extern void printInfo();
 extern void line(int len);
 
+
+// Routine for checking duplicity of boundary conditions
 void CheckBoundaries(Array<bool> &bnd_flags,
                      Array<int> &bc_bnds)
 {
@@ -48,6 +50,114 @@ void CheckBoundaries(Array<bool> &bnd_flags,
       bnd_flags[bnd] = true;
    }
 }
+
+// Routine for pretty printing boundary forces to screen
+void PrintForce(const Array<int>& bdr_attributes,
+                const Vector& bdrForce)
+{
+   // Print line lambda function
+   auto pline = [](int len)
+   {
+      cout<<" +";
+      for (int b=0; b<len; ++b) { cout<<"-"; }
+      cout<<"+\n";
+   };
+
+   // Print boundary header
+   int nbdr = bdr_attributes.Size();
+   cout<<"\n";
+   pline(10+13*nbdr);
+   cout<<" | Boundary | ";
+   for (int b=0; b<nbdr; ++b)
+   {
+      cout<<std::setw(10)<<bdr_attributes[b]<<" | ";
+   }
+   cout<<"\n";
+   pline(10+13*nbdr);
+
+   // Print actual forces
+   char dimName[] = "xyz";
+   for (int v=0; v<bdrForce.Width(); ++v)
+   {
+      cout<<" | Force "<<dimName[v]<<"  | ";
+      for (int b=0; b<nbdr; ++b)
+      {
+         int bnd = bdr_attributes[b];
+         cout<<std::defaultfloat<<std::setprecision(4)<<std::setw(10);
+         cout<<bdrForce(bnd-1,v)<<" | ";
+      }
+      cout<<"\n";
+   }
+   line(10+13*nbdr);
+   cout<<"\n"<<std::flush;
+}
+
+// Helper class for writting global data to file
+class OutputData
+{
+private:
+   std::ofstream os;
+   Array<int> bdr_attr;
+   bool print;
+
+public:
+   // Constructor
+   OutputData(bool prt, int dim, Array<int>& bdr_attr_, int si)
+     : print(prt), bdr_attr(bdr_attr_)
+   {
+      if (!print) return;
+
+      std::ostringstream filename;
+      filename << "output_"<<std::setw(6)<<setfill('0')<<si<< ".dat";
+      os.open(filename.str().c_str());
+
+      // Header
+      char dimName[] = "xyz";
+      int i = 9;
+      os <<"# 1: step"<<"\t"<<"2: time"<<"\t"<<"3: dt"<<"\t"
+         <<"4: cfl"<<"\t"<<"5: outflow"<<"\t"
+         <<"6: Ekin"<<"\t"<<"7: Epot"<<"\t"<<"8: Visc disp"<<"\t";
+      for (int b=0; b<bdr_attr.Size(); ++b)
+      {
+         int bnd = bdr_attr[b];
+         for (int v=0; v<dim; ++v)
+         {
+            std::ostringstream forcename;
+            forcename <<i++<<": F"<<dimName[v]<<"_"<<bnd;
+            os<<forcename.str()<<"\t";
+         }
+      }
+      os<<endl;
+   };
+
+   // Print to file
+   void Print(int si, real_t t, real_t dt, real_t cfl,
+              real_t outflow, Vector &energy, DenseMatrix& bdrForce)
+   {
+      if (!print) return;
+
+      int nbdr = bdr_attr.Size();
+      os << std::setw(10);
+      os << si<<"\t"<<t<<"\t"<<dt<<"\t"<<cfl<<"\t"<<outflow<<"\t";
+      energy.Print(os);
+      for (int b=0; b<nbdr; ++b)
+      {
+         int bnd = bdr_attr[b];
+         for (int v=0; v<bdrForce.Width(); ++v)
+         {
+            os<<bdrForce(bnd-1,v)<<"\t";
+         }
+      }
+      os<<"\n"<< std::flush;
+   };
+
+   // Destructor
+   ~OutputData()
+   {
+      os.close();
+   };
+
+};
 
 int main(int argc, char *argv[])
 {
@@ -502,13 +612,9 @@ int main(int argc, char *argv[])
    gmres.SetPreconditioner(jac_prec);
 
    // Set up the Newton solver
-   //RBVMS::SystemResidualMonitor newton_monitor(MPI_COMM_WORLD,
-  //                                             "Newton", 1,
-   //                                            bOffsets);
    RBVMS::NewtonSystemSolver newton_solver(MPI_COMM_WORLD,bOffsets);
    newton_solver.iterative_mode = true;
    newton_solver.SetPrintLevel(1);
-   //newton_solver.SetMonitor(newton_monitor);
    newton_solver.SetRelTol(Newton_RelTol);
    newton_solver.SetMaxIter(Newton_MaxIter);
    newton_solver.SetSolver(gmres);
@@ -557,31 +663,7 @@ int main(int argc, char *argv[])
    dist_solver.SetVolumeConservationJacEps(VolCons_JacEps);
 
    // Open output file
-   std::ofstream os;
-   if (Mpi::Root())
-   {
-      std::ostringstream filename;
-      filename << "output_"<<std::setw(6)<<setfill('0')<<si<< ".dat";
-      os.open(filename.str().c_str());
-
-      // Header
-      char dimName[] = "xyz";
-      int i = 6;
-      os <<"# 1: step"<<"\t"<<"2: time"<<"\t"<<"3: dt"<<"\t"
-         <<"4: cfl"<<"\t"<<"5: outflow"<<"\t";
-
-      for (int b=0; b<pmesh.bdr_attributes.Size(); ++b)
-      {
-         int bnd = pmesh.bdr_attributes[b];
-         for (int v=0; v<dim; ++v)
-         {
-            std::ostringstream forcename;
-            forcename <<i++<<": F"<<dimName[v]<<"_"<<bnd;
-            os<<forcename.str()<<"\t";
-         }
-      }
-      os<<endl;
-   }
+   OutputData output(Mpi::Root(), pmesh.Dimension(), pmesh.bdr_attributes, si);
 
    // Loop till final time reached
    while (t < t_final)
@@ -612,62 +694,6 @@ int main(int argc, char *argv[])
       x_phi.GetTrueDofs(xp.GetBlock(2));
 
       si++;
-
-      // Postprocess solution
-      real_t cfl = evo.GetCFL();
-      real_t outflow = evo.GetOutflow();
-      DenseMatrix bdrForce = evo.GetForce();
-      if (Mpi::Root())
-      {
-         // Print to file
-         int nbdr = pmesh.bdr_attributes.Size();
-         os << std::setw(10);
-         os << si<<"\t"<<t<<"\t"<<dt<<"\t"<<cfl<<"\t"<<outflow<<"\t";
-         for (int b=0; b<nbdr; ++b)
-         {
-            int bnd = pmesh.bdr_attributes[b];
-            for (int v=0; v<dim; ++v)
-            {
-               os<<bdrForce(bnd-1,v)<<"\t";
-            }
-         }
-         os<<"\n"<< std::flush;
-
-         // Print line lambda function
-         auto pline = [](int len)
-         {
-            cout<<" +";
-            for (int b=0; b<len; ++b) { cout<<"-"; }
-            cout<<"+\n";
-         };
-
-         // Print boundary header
-         cout<<"\n";
-         pline(10+13*nbdr);
-         cout<<" | Boundary | ";
-         for (int b=0; b<nbdr; ++b)
-         {
-            cout<<std::setw(10)<<pmesh.bdr_attributes[b]<<" | ";
-         }
-         cout<<"\n";
-         pline(10+13*nbdr);
-
-         // Print actual forces
-         char dimName[] = "xyz";
-         for (int v=0; v<dim; ++v)
-         {
-            cout<<" | Force "<<dimName[v]<<"  | ";
-            for (int b=0; b<nbdr; ++b)
-            {
-               int bnd = pmesh.bdr_attributes[b];
-               cout<<std::defaultfloat<<std::setprecision(4)<<std::setw(10);
-               cout<<bdrForce(bnd-1,v)<<" | ";
-            }
-            cout<<"\n";
-         }
-         pline(10+13*nbdr);
-         cout<<"\n"<<std::flush;
-      }
 
       // Write visualization files
       while (t >= dt_vis*vi)
@@ -703,21 +729,12 @@ int main(int argc, char *argv[])
 
       // Change time step
       real_t dt0 = dt;
-      if ((dt_gain > 0))
+      if (dt_gain > 0)
       {
+         real_t cfl = evo.GetCFL();
          dt *= pow(cfl_target/cfl, dt_gain);
          dt = min(dt, dt_max);
          dt = max(dt, dt_min);
-      }
-
-      // Print cfl and dt to screen
-      if (Mpi::Root())
-      {
-         line(80);
-         cout<<" outflow = "<<outflow<<endl;
-         cout<<" cfl = "<<cfl<<endl;
-         cout<<" dt  = "<<dt0<<" --> "<<dt<<endl;
-         line(80);
       }
 
       // Write restart files
@@ -759,9 +776,32 @@ int main(int argc, char *argv[])
          }
       }
 
-      if (Mpi::Root()) { cout<<endl<<endl; }
+      // Postprocess solution
+      real_t cfl = evo.GetCFL();
+      real_t outflow = evo.GetOutflow();
+      Vector energy = evo.GetEnergy();
+      DenseMatrix bdrForce = evo.GetForce();
+
+      // Write to file
+      output.Print(si, t, dt, cfl, outflow, energy, bdrForce);
+
+      // Write to screen
+      if (Mpi::Root())
+      {
+         PrintForce(pmesh.bdr_attributes,bdrForce);
+         cout<<endl;
+         line(80);
+         cout<<" Kinetic Energy      = "<<energy[0]<<endl;
+         cout<<" Potential Energy    = "<<energy[1]<<endl;
+         cout<<" Viscous Dissipation = "<<energy[2]<<endl;
+         cout<<" Mass Outflow Rate   = "<<outflow<<endl;
+         cout<<" CFL-Number          = "<<cfl<<endl;
+         if (dt_gain > 0) cout<<" dt  = "<<dt0<<" --> "<<dt<<endl;
+         line(80);
+         cout<<endl<<endl<<std::flush;
+      }
    }
-   os.close();
+
 
    // Free the used memory.
    for (int i = 0; i < fecs.Size(); ++i)

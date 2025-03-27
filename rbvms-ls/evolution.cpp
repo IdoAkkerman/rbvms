@@ -10,15 +10,15 @@
 using namespace mfem;
 using namespace RBVMS;
 
-Vector NewtonSystemSolver::Norms(const Vector &r) const
+void NewtonSystemSolver::Norms(const Vector &r, Vector& lnorm) const
 {
-   Vector lnorm(nvar);
+   lnorm.SetSize(nvar);
    for (int i = 0; i < nvar; ++i)
    {
       Vector r_i(r.GetData() + bOffsets[i], bOffsets[i+1] - bOffsets[i]);
       lnorm[i] = sqrt(InnerProduct(MPI_COMM_WORLD, r_i, r_i));
+      MFEM_VERIFY(IsFinite(lnorm[i]), "norm[" << i << "] = " << lnorm[i]);
    }
-   return lnorm;
 }
 
 //
@@ -44,8 +44,9 @@ void NewtonSystemSolver::Mult(const Vector &b, Vector &x) const
       r -= b;
    }
 
-//   initial_norm 
-   norm0 = norm =  Norms(r);
+//   initial_norm
+   Norms(r, norm0);
+   norm = norm0;
 
    if (print_options.first_and_last && !print_options.iterations)
    {
@@ -54,23 +55,19 @@ void NewtonSystemSolver::Mult(const Vector &b, Vector &x) const
          for (int i = 0; i < nvar; ++i)
          {
             mfem::out<<std::setw(8)<<std::defaultfloat<<std::setprecision(4)
-                     <<norm[i]<<" %\n";
+                     <<norm0[i]<<" %\n";
          }
    }
 
    for (int i = 0; i < nvar; ++i)
    {
-      norm_goal[i] = std::max(rel_tol*norm[i], abs_tol);
+      norm_goal[i] = std::max(rel_tol*norm0[i], abs_tol);
    }
    prec->iterative_mode = false;
 
    // x_{i+1} = x_i - [DF(x_i)]^{-1} [F(x_i)-b]
    for (it = 0; true; it++)
    {
-      for (int i = 0; i < nvar; ++i)
-      {
-         MFEM_VERIFY(IsFinite(norm[i]), "norm = " << norm[i]);
-      }
       if (print_options.iterations)
       {
          mfem::out << "Newton iteration " << std::setw(3) << it <<"\n"
@@ -130,7 +127,7 @@ void NewtonSystemSolver::Mult(const Vector &b, Vector &x) const
       {
          r -= b;
       }
-      norm = Norms(r);
+      Norms(r, norm);
    }
 
    final_iter = it;
@@ -139,8 +136,15 @@ void NewtonSystemSolver::Mult(const Vector &b, Vector &x) const
    if (print_options.summary || (!converged && print_options.warnings) ||
        print_options.first_and_last)
    {
-      mfem::out << "Newton: Number of iterations: " << final_iter << '\n'
-                << "   ||r|| = " << final_norm << '\n';
+         mfem::out << "Newton iteration " << std::setw(3) << it <<"\n"
+                   << " ||r||  \t"<< "||r||/||r_0||\n";
+         for (int i = 0; i < nvar; ++i)
+         {
+            mfem::out<<std::setw(8)<<std::defaultfloat<<std::setprecision(4)
+                     <<norm[i]<<"\t"
+                     <<std::setw(8)<<std::fixed<<std::setprecision(2)
+                     <<100*norm[i]/norm0[i]<<" %\n";
+         }
    }
    if (!converged && (print_options.summary || print_options.warnings))
    {
@@ -175,6 +179,14 @@ void Evolution::ImplicitSolve(const real_t dt,
    }
 }
 
+// Get the energy from the formulation
+Vector Evolution::GetEnergy() const
+{
+   Vector energy;
+   form.Energy(dudt,energy);
+   return energy;
+}
+
 // Get the CFL number from the formulation
 real_t Evolution::GetCFL() const
 {
@@ -188,7 +200,7 @@ real_t Evolution::GetOutflow() const
 }
 
 // Get the boundary forces from the formulation
-DenseMatrix Evolution::GetForce()
+DenseMatrix Evolution::GetForce() const
 {
    return form.GetForce();
 }
@@ -260,6 +272,84 @@ void ParTimeDepBlockNonlinForm::ResetGradient()
 }
 
 // Block T-Vector to Block T-Vector
+void ParTimeDepBlockNonlinForm::Energy(const Vector &dx, Vector &energy) const
+{
+   // dxs_true is not modified, so const_cast is okay
+   dxs_true.Update(const_cast<Vector &>(dx), block_trueOffsets);
+   xs.Update(block_offsets);
+   dxs.Update(block_offsets);
+
+   fes[0]->GetProlongationMatrix()->Mult(
+      dxs_true.GetBlock(0), dxs.GetBlock(0));
+
+   add(xs0,dt,dxs.GetBlock(0),xs.GetBlock(0));   // x = x0 + dt*dx
+
+   fes[1]->GetProlongationMatrix()->Mult(
+      dxs_true.GetBlock(1), xs.GetBlock(1));
+
+   fes[2]->GetProlongationMatrix()->Mult(
+      dxs_true.GetBlock(2), dxs.GetBlock(2));
+
+   add(xs2,dt,dxs.GetBlock(2),xs.GetBlock(2));   // x = x0 + dt*dx
+
+   // Actual assembly
+   Array<Array<int> *>vdofs(fes.Size());
+   Array<Array<int> *>vdofs2(fes.Size());
+   Array<Vector *> el_x(fes.Size());
+   Array<const Vector *> el_x_const(fes.Size());
+   Array<Vector *> el_dx(fes.Size());
+   Array<const Vector *> el_dx_const(fes.Size());
+
+   Array<const FiniteElement *> fe(fes.Size());
+   Array<const FiniteElement *> fe2(fes.Size());
+   ElementTransformation *T;
+   FaceElementTransformations *Tr;
+   Array<DofTransformation *> doftrans(fes.Size()); doftrans = nullptr;
+   Mesh *mesh = fes[0]->GetMesh();
+
+   for (int s=0; s<fes.Size(); ++s)
+   {
+      el_x_const[s] = el_x[s] = new Vector();
+      el_dx_const[s] = el_dx[s] = new Vector();
+      vdofs[s] = new Array<int>;
+      vdofs2[s] = new Array<int>;
+   }
+
+   // Domain interior
+   Vector el_energy(3);
+   energy.SetSize(3);
+   energy = 0.0;
+   for (int i = 0; i < fes[0]->GetNE(); ++i)
+   {
+      T = fes[0]->GetElementTransformation(i);
+      for (int s = 0; s < fes.Size(); ++s)
+      {
+         doftrans[s] = fes[s]->GetElementVDofs(i, *(vdofs[s]));
+         fe[s] = fes[s]->GetFE(i);
+         xs.GetBlock(s).GetSubVector(*(vdofs[s]), *el_x[s]);
+         dxs.GetBlock(s).GetSubVector(*(vdofs[s]), *el_dx[s]);
+         if (doftrans[s])
+         {
+            MFEM_WARNING("ParTimeDepBlockNonlinForm::Doftrans");
+            doftrans[s]->InvTransformPrimal(*el_x[s]);
+            doftrans[s]->InvTransformPrimal(*el_dx[s]);
+         }
+      }
+
+      integrator.AssembleElementEnergy(fe, *T,
+                                       el_x_const,
+                                       el_dx_const,
+                                       el_energy);
+      energy += el_energy;
+   }
+
+   // Communicate boundary force
+   Vector tmp(energy);
+   MPI_Allreduce(tmp.GetData(), energy.GetData(), energy.Size(),
+                 MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+}
+
+// Block T-Vector to Block T-Vector
 void ParTimeDepBlockNonlinForm::Mult(const Vector &dx, Vector &y) const
 {
    // dxs_true is not modified, so const_cast is okay
@@ -296,15 +386,15 @@ void ParTimeDepBlockNonlinForm::Mult(const Vector &dx, Vector &y) const
    ys_true.SyncFromBlocks();
    y.SyncMemory(ys_true);
 
-   // Comminucate CFL
+   // Communicate CFL
    real_t tmp = cfl;
    MPI_Allreduce(&tmp, &cfl, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
-   // Comminucate outflow
+   // Communicate outflow
    tmp = outflow;
    MPI_Allreduce(&tmp, &outflow, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-   // Comminucate boundary force
+   // Communicate boundary force
    DenseMatrix tmpDM(bdrForce);
    MPI_Allreduce(tmpDM.GetData(), bdrForce.GetData(),
                  bdrForce.NumRows()*bdrForce.NumCols(),
