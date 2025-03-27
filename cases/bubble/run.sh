@@ -12,7 +12,7 @@ mpicc -shared -o rbvms-ls.so -fPIC bubble.c
 
 # Create mesh -- if required
 if [ ! -f $mesh ]; then
-   gmsh -2 box.geo -format msh22 -clscale 0.04
+   gmsh -2 box.geo -format msh22 -clscale 0.02
 fi
 
 # Actual run 
