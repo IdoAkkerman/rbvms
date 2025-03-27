@@ -378,7 +378,7 @@ ConvectionDistanceSolver::ConvectionDistanceSolver(ParFiniteElementSpace &space,
    gmres.SetPrintLevel(-1);
 
    // Default values
-   gmres.SetRelTol(1e-4);
+   gmres.SetRelTol(1e-3);
    gmres.SetAbsTol(1e-12);
    gmres.SetMaxIter(100);
    prec = new HypreSmoother();
@@ -391,7 +391,7 @@ ConvectionDistanceSolver::ConvectionDistanceSolver(ParFiniteElementSpace &space,
    newton_solver.SetOperator(form);
 
    // Default values
-   newton_solver.SetRelTol(1e-4);
+   newton_solver.SetRelTol(1e-3);
    newton_solver.SetAbsTol(1e-12);
    newton_solver.SetMaxIter(10);
 }
