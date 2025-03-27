@@ -78,6 +78,8 @@ int main(int argc, char *argv[])
    // Problem parameters
    Array<int> strong_bdr;
    Array<int> weak_bdr;
+   Array<int> normal_bdr;
+
    Array<int> outflow_bdr;
    Array<int> suction_bdr;
    Array<int> blowing_bdr;
@@ -92,6 +94,8 @@ int main(int argc, char *argv[])
                   "Boundaries where Dirichelet BCs are enforced strongly.");
    args.AddOption(&weak_bdr, "-wbc", "--weak-bdr",
                   "Boundaries where Dirichelet BCs are enforced weakly.");
+   args.AddOption(&normal_bdr, "-nbc", "--normal-bdr",
+                  "Boundaries where Normal Dirichelet BCs are enforced weakly.");
    args.AddOption(&outflow_bdr, "-out", "--outflow-bdr",
                   "Outflow boundaries.");
    args.AddOption(&suction_bdr, "-suc", "--suction-bdr",
@@ -192,7 +196,7 @@ int main(int argc, char *argv[])
    args.AddOption(&VolCons_RelTol, "-vct", "--volcons-newton-tolerance",
                   "Relative tolerance for the volume conservation solver.");
    args.AddOption(&VolCons_JacEps, "-vce", "--volcons-jac-eps",
-                  "Finite-difference pertubation for obtaining the jacobian\n"
+                  "Finite-difference pertubation for obtaining the jacobian\n\t"
                   "for the volume conservation solver.");
 
    // Solution input/output params
@@ -246,6 +250,7 @@ int main(int argc, char *argv[])
    {
       if (strong_bdr.Size()>0) {cout<<"Strong  = "; strong_bdr.Print();}
       if (weak_bdr.Size()>0) {cout<<"Weak    = "; weak_bdr.Print();}
+      if (normal_bdr.Size()>0) { cout<<"Normal  = "; normal_bdr.Print();}
       if (outflow_bdr.Size()>0) { cout<<"Outflow = "; outflow_bdr.Print() ;}
       if (suction_bdr.Size()>0) { cout<<"Suction = "; suction_bdr.Print() ;}
       if (blowing_bdr.Size()>0) { cout<<"Blowing = "; blowing_bdr.Print() ;}
@@ -261,6 +266,7 @@ int main(int argc, char *argv[])
    }
    CheckBoundaries(bnd_flag, strong_bdr);
    CheckBoundaries(bnd_flag, weak_bdr);
+   CheckBoundaries(bnd_flag, normal_bdr);
    CheckBoundaries(bnd_flag, outflow_bdr);
    CheckBoundaries(bnd_flag, suction_bdr);
    CheckBoundaries(bnd_flag, blowing_bdr);
@@ -432,11 +438,13 @@ int main(int argc, char *argv[])
       // Define initial condition from file
       t = 0.0; si = 0; ri = 1; vi = 1;
       LibVectorCoefficient sol_u(dim, lib_file, "sol_u");
+      LibCoefficient sol_p(lib_file, "sol_p");
       LibCoefficient sol_phi(lib_file, "sol_phi");
       sol_u.SetTime(-1.0);
+      sol_p.SetTime(-1.0);
       sol_phi.SetTime(-1.0);
       x_u.ProjectCoefficient(sol_u);
-      x_p = 0.0;
+      x_p.ProjectCoefficient(sol_p);
       x_phi.ProjectCoefficient(sol_phi);
 
       x_u.GetTrueDofs(xp.GetBlock(0));
@@ -471,6 +479,10 @@ int main(int argc, char *argv[])
    HypreILU* ilu_cont = new HypreILU();
    HypreILU* ilu_ls = new HypreILU();
 
+  // HypreSmoother* ilu_mom = new HypreSmoother();
+  // HypreSmoother* ilu_cont = new HypreSmoother();
+  // HypreSmoother* ilu_ls = new HypreSmoother();
+
    pc_mom  = ilu_mom;
    pc_cont = ilu_cont;
    pc_ls   = ilu_ls;
@@ -490,13 +502,13 @@ int main(int argc, char *argv[])
    gmres.SetPreconditioner(jac_prec);
 
    // Set up the Newton solver
-   RBVMS::SystemResidualMonitor newton_monitor(MPI_COMM_WORLD,
-                                               "Newton", 1,
-                                               bOffsets);
-   NewtonSolver newton_solver(MPI_COMM_WORLD);
+   //RBVMS::SystemResidualMonitor newton_monitor(MPI_COMM_WORLD,
+  //                                             "Newton", 1,
+   //                                            bOffsets);
+   RBVMS::NewtonSystemSolver newton_solver(MPI_COMM_WORLD,bOffsets);
    newton_solver.iterative_mode = true;
-   newton_solver.SetPrintLevel(-1);
-   newton_solver.SetMonitor(newton_monitor);
+   newton_solver.SetPrintLevel(1);
+   //newton_solver.SetMonitor(newton_monitor);
    newton_solver.SetRelTol(Newton_RelTol);
    newton_solver.SetMaxIter(Newton_MaxIter);
    newton_solver.SetSolver(gmres);
@@ -504,13 +516,16 @@ int main(int argc, char *argv[])
    // Define the physical parameters
    LibCoefficient rho(lib_file, "rho", false, rho_param);
    LibCoefficient mu(lib_file, "mu", false, mu_param);
-   LibVectorCoefficient sol(dim, lib_file, "sol_u");
+   LibVectorCoefficient sol_u(dim, lib_file, "sol_u");
+   LibCoefficient sol_phi(lib_file, "sol_phi");
    LibVectorCoefficient force(dim, lib_file, "force");
    LibCoefficient suction(lib_file, "suction", false, 0.0);
    LibCoefficient blowing(lib_file, "blowing", false, 0.0);
 
    // Define weak form and evolution
-   RBVMS::IncNavStoIntegrator integrator(rho, mu, force, sol, suction, blowing);
+   RBVMS::IncNavStoIntegrator integrator(rho, mu, force,
+                                         sol_u, sol_phi,
+                                         suction, blowing);
    RBVMS::ParTimeDepBlockNonlinForm form(spaces, integrator);
    RBVMS::Evolution evo(form, newton_solver);
    ode_solver->Init(evo);
@@ -518,6 +533,7 @@ int main(int argc, char *argv[])
    // Set boundaries in the weakform
    form.SetStrongBC (strong_bdr);
    form.SetWeakBC   (weak_bdr);
+   form.SetNormalBC (normal_bdr);
    form.SetOutflowBC(outflow_bdr);
    form.SetSuctionBC(suction_bdr);
    form.SetBlowingBC(blowing_bdr);
