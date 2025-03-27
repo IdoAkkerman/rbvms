@@ -27,7 +27,8 @@ private:
    Coefficient &c_rho;
    Coefficient &c_mu;
    VectorCoefficient &c_force;
-   VectorCoefficient &c_sol;
+   VectorCoefficient &c_sol_u;
+   Coefficient &c_sol_phi;
    Coefficient &c_suction;
    Coefficient &c_blowing;
 
@@ -38,7 +39,7 @@ private:
    real_t Cd = 6.0;
    real_t Ct = 1.0;
    real_t Cb = 12.0;
-   real_t Cn = 10000.0;
+   real_t Cn = 100.0;
 
    real_t kdc0 = 0.0;
    real_t kdc1 = 0.1;
@@ -90,7 +91,8 @@ public:
    IncNavStoIntegrator(Coefficient &rho_,
                        Coefficient &mu_,
                        VectorCoefficient &force_,
-                       VectorCoefficient &sol_,
+                       VectorCoefficient &sol_u,
+                       Coefficient &sol_phi,
                        Coefficient &suction_,
                        Coefficient &blowing_);
 
@@ -112,17 +114,18 @@ public:
       dt = dt_;
       c_mu.SetTime(t);
       c_force.SetTime(t);
-      c_sol.SetTime(t);
+      c_sol_u.SetTime(t);
+      c_sol_phi.SetTime(t);
       c_suction.SetTime(t);
       c_blowing.SetTime(t);
    };
 
    /// Assemble the local energy
-   void GetElementEnergy(const Array<const FiniteElement *>&el,
-                         ElementTransformation &Tr,
-                         const Array<const Vector *> &elfun,
-                         const Array<const Vector *> &elrate,
-                         Vector &energy);
+   void AssembleElementEnergy(const Array<const FiniteElement *>&el,
+                              ElementTransformation &Tr,
+                              const Array<const Vector *> &elfun,
+                              const Array<const Vector *> &elrate,
+                              Vector &energy);
 
    /// Assemble the element interior residual vectors
    void AssembleElementVector(const Array<const FiniteElement *> &el,
@@ -158,7 +161,6 @@ public:
                             const Array2D<DenseMatrix *> &elmats,
                             bool suction = false);
 
-
    /// Assemble the weak Dirichlet BC boundary residual vectors
    void AssembleWeakDirBCVector(const Array<const FiniteElement *> &el1,
                                 const Array<const FiniteElement *> &el2,
@@ -176,6 +178,22 @@ public:
                               const Array<const Vector *> &elrate,
                               const Array2D<DenseMatrix *> &elmats,
                               bool blowing = false);
+
+   /// Assemble the normal Dirichlet BC boundary residual vectors
+   void AssembleNormalBCVector(const Array<const FiniteElement *> &el1,
+                                const Array<const FiniteElement *> &el2,
+                                FaceElementTransformations &Tr,
+                                const Array<const Vector *> &elfun,
+                                const Array<const Vector *> &elrate,
+                                const Array<Vector *> &elvect);
+
+   /// Assemble the normal Dirichlet BC boundary gradient matrices
+   void AssembleNormalBCGrad(const Array<const FiniteElement *>&el1,
+                             const Array<const FiniteElement *>&el2,
+                             FaceElementTransformations &Tr,
+                             const Array<const Vector *> &elfun,
+                             const Array<const Vector *> &elrate,
+                             const Array2D<DenseMatrix *> &elmats);
 };
 
 } // namespace RBVMS

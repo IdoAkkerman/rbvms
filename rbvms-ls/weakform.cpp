@@ -151,12 +151,12 @@ real_t IncNavStoIntegrator::GetRhoGrad(real_t &phi, Vector &grad_phi,
 }
 
 // Assemble the element energy
-void IncNavStoIntegrator::GetElementEnergy(const
-                                           Array<const FiniteElement *>&el,
-                                           ElementTransformation &Tr,
-                                           const Array<const Vector *> &elsol,
-                                           const Array<const Vector *> &elrate,
-                                           Vector &energy)
+void IncNavStoIntegrator::AssembleElementEnergy(
+   const Array<const FiniteElement *>&el,
+   ElementTransformation &Tr,
+   const Array<const Vector *> &elsol,
+   const Array<const Vector *> &elrate,
+   Vector &energy)
 {
    if (el.Size() != 3)
    {
@@ -212,7 +212,7 @@ void IncNavStoIntegrator::GetElementEnergy(const
       elf_du.MultTranspose(sh_u, dudt);
 
       el[0]->CalcPhysDShape(Tr, shg_u);
-      shg_u.Mult(u, ushg_u);
+      MultAtB(elf_u, shg_u, grad_u);
 
       el[1]->CalcPhysShape(Tr, sh_p);
       real_t p = sh_p*(*elsol[1]);
@@ -235,7 +235,9 @@ void IncNavStoIntegrator::GetElementEnergy(const
 
       // Compute strong residual
       energy[0] += (rho*(u*u)/2)*w;
-      energy[1] += rho*(x*f)*w;
+      energy[1] -= rho*(x*f)*w;
+      grad_u.Symmetrize();
+      energy[2] += 2*mu*grad_u.FNorm2()*w;
    }
 }
 
