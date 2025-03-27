@@ -17,6 +17,39 @@ using namespace mfem;
 namespace RBVMS
 {
 
+/// Newton's method for solving F(x)=b for a given operator F.
+/** The method GetGradient() must be implemented for the operator F.
+    The preconditioner is used (in non-iterative mode) to evaluate
+    the action of the inverse gradient of the operator. */
+class NewtonSystemSolver : public NewtonSolver
+{
+private:
+   Array<int> &bOffsets;
+   int nvar;
+
+   Vector Norms(const Vector &r) const;
+
+public:
+   NewtonSystemSolver(Array<int> &offsets) : bOffsets(offsets)
+   {
+      nvar = bOffsets.Size()-1;
+   }
+
+#ifdef MFEM_USE_MPI
+   NewtonSystemSolver(MPI_Comm comm_, Array<int> &offsets)
+      : NewtonSolver(comm_), bOffsets(offsets) 
+   {
+      nvar = bOffsets.Size()-1;
+   }
+#endif
+
+   /// Solve the nonlinear system with right-hand side @a b.
+   /** If `b.Size() != Height()`, then @a b is assumed to be zero. */
+   virtual void Mult(const Vector &b, Vector &x) const;
+
+};
+
+
 // Predefine class
 class ParTimeDepBlockNonlinForm;
 
@@ -74,6 +107,7 @@ private:
 
    Array<int> strongBCBdr;
    Array<int> weakBCBdr;
+   Array<int> normalBCBdr;
    Array<int> outflowBdr;
    Array<int> suctionBdr;
    Array<int> blowingBdr;
@@ -86,6 +120,7 @@ private:
    /// Conservative boundary forces
    mutable DenseMatrix bdrForce;
    mutable bool hasGrad;
+   mutable int  gradCalls;
 
 public:
    /// Constructor
@@ -93,10 +128,11 @@ public:
                              RBVMS::IncNavStoIntegrator &integrator);
 
    void SetStrongBC (Array<int> strong_bdr);
-   void SetWeakBC   (Array<int> weak_bdr);
-   void SetOutflowBC(Array<int> outflow_bdr);
-   void SetSuctionBC(Array<int> suction_bdr);
-   void SetBlowingBC(Array<int> blowing_bdr);
+   void SetWeakBC   (Array<int> weak_bdr) { weak_bdr.Copy(weakBCBdr); };
+   void SetNormalBC   (Array<int> nor_bdr) { nor_bdr.Copy(normalBCBdr);};
+   void SetOutflowBC(Array<int> outflow_bdr) { outflow_bdr.Copy(outflowBdr);};
+   void SetSuctionBC(Array<int> suction_bdr) { suction_bdr.Copy(suctionBdr);};
+   void SetBlowingBC(Array<int> blowing_bdr) { blowing_bdr.Copy(blowingBdr);};
 
    /// Set the solution of the previous time step @a x0
    /// and the timestep size @a dt of the current solve.

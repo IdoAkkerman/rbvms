@@ -10,6 +10,144 @@
 using namespace mfem;
 using namespace RBVMS;
 
+Vector NewtonSystemSolver::Norms(const Vector &r) const
+{
+   Vector lnorm(nvar);
+   for (int i = 0; i < nvar; ++i)
+   {
+      Vector r_i(r.GetData() + bOffsets[i], bOffsets[i+1] - bOffsets[i]);
+      lnorm[i] = sqrt(InnerProduct(MPI_COMM_WORLD, r_i, r_i));
+   }
+   return lnorm;
+}
+
+//
+void NewtonSystemSolver::Mult(const Vector &b, Vector &x) const
+{
+   MFEM_VERIFY(oper != NULL, "the Operator is not set (use SetOperator).");
+   MFEM_VERIFY(prec != NULL, "the Solver is not set (use SetSolver).");
+
+   int it;
+   Vector norm0(nvar), norm(nvar), norm_goal(nvar);
+   const bool have_b = (b.Size() == Height());
+
+   if (!iterative_mode)
+   {
+      x = 0.0;
+   }
+
+   ProcessNewState(x);
+
+   oper->Mult(x, r);
+   if (have_b)
+   {
+      r -= b;
+   }
+
+//   initial_norm 
+   norm0 = norm =  Norms(r);
+
+   if (print_options.first_and_last && !print_options.iterations)
+   {
+         mfem::out << "Newton iteration " << std::setw(3) << it <<"\n"
+                   << " ||r||\n";
+         for (int i = 0; i < nvar; ++i)
+         {
+            mfem::out<<std::setw(8)<<std::defaultfloat<<std::setprecision(4)
+                     <<norm[i]<<" %\n";
+         }
+   }
+
+   for (int i = 0; i < nvar; ++i)
+   {
+      norm_goal[i] = std::max(rel_tol*norm[i], abs_tol);
+   }
+   prec->iterative_mode = false;
+
+   // x_{i+1} = x_i - [DF(x_i)]^{-1} [F(x_i)-b]
+   for (it = 0; true; it++)
+   {
+      for (int i = 0; i < nvar; ++i)
+      {
+         MFEM_VERIFY(IsFinite(norm[i]), "norm = " << norm[i]);
+      }
+      if (print_options.iterations)
+      {
+         mfem::out << "Newton iteration " << std::setw(3) << it <<"\n"
+                   << " ||r||  \t"<< "||r||/||r_0||\n";
+         for (int i = 0; i < nvar; ++i)
+         {
+            mfem::out<<std::setw(8)<<std::defaultfloat<<std::setprecision(4)
+                     <<norm[i]<<"\t"
+                     <<std::setw(8)<<std::fixed<<std::setprecision(2)
+                     <<100*norm[i]/norm0[i]<<" %\n";
+         }
+      }
+      Monitor(it, -1.0, r, x);
+      converged = true;
+      for (int i = 0; i < nvar; ++i)
+      {
+         if (norm[i] > norm_goal[i])
+         {
+            converged = false;
+         }
+      }
+      if (converged) break;
+
+      if (it >= max_iter)
+      {
+         converged = false;
+         break;
+      }
+
+      grad = &oper->GetGradient(x);
+      prec->SetOperator(*grad);
+
+      if (lin_rtol_type)
+      {
+         AdaptiveLinRtolPreSolve(x, it, norm.Norml2());
+      }
+
+      prec->Mult(r, c); // c = [DF(x_i)]^{-1} [F(x_i)-b]
+
+      if (lin_rtol_type)
+      {
+         AdaptiveLinRtolPostSolve(c, r, it, norm.Norml2());
+      }
+
+      const real_t c_scale = ComputeScalingFactor(x, b);
+      if (c_scale == 0.0)
+      {
+         converged = false;
+         break;
+      }
+      add(x, -c_scale, c, x);
+
+      ProcessNewState(x);
+
+      oper->Mult(x, r);
+      if (have_b)
+      {
+         r -= b;
+      }
+      norm = Norms(r);
+   }
+
+   final_iter = it;
+   final_norm = norm.Norml2();
+
+   if (print_options.summary || (!converged && print_options.warnings) ||
+       print_options.first_and_last)
+   {
+      mfem::out << "Newton: Number of iterations: " << final_iter << '\n'
+                << "   ||r|| = " << final_norm << '\n';
+   }
+   if (!converged && (print_options.summary || print_options.warnings))
+   {
+      mfem::out << "Newton: No convergence!\n";
+   }
+}
+
 // Evolution Constructor
 Evolution::Evolution(ParTimeDepBlockNonlinForm &form,
                      IterativeSolver &solver)
@@ -94,30 +232,6 @@ void ParTimeDepBlockNonlinForm::SetStrongBC (Array<int> strong_bdr)
    SetEssentialBC(ess_bdr, rhs);
 }
 
-// Set the boundaries were weak Dirichlet BCs are imposed
-void ParTimeDepBlockNonlinForm::SetWeakBC   (Array<int> weak_bdr)
-{
-   weak_bdr.Copy(weakBCBdr);
-}
-
-// Set the outflow boundaries
-void ParTimeDepBlockNonlinForm::SetOutflowBC(Array<int> outflow_bdr)
-{
-   outflow_bdr.Copy(outflowBdr);
-}
-
-// Set the suction boundaries
-void ParTimeDepBlockNonlinForm::SetSuctionBC(Array<int> suction_bdr)
-{
-   suction_bdr.Copy(suctionBdr);
-}
-
-// Set the blowing boundaries
-void ParTimeDepBlockNonlinForm::SetBlowingBC(Array<int> blowing_bdr)
-{
-   blowing_bdr.Copy(blowingBdr);
-}
-
 // Set the solution of the previous time step
 // and the timestep size of the current solve.
 void ParTimeDepBlockNonlinForm::SetTimeAndSolution(const real_t t,
@@ -142,6 +256,7 @@ void ParTimeDepBlockNonlinForm::SetTimeAndSolution(const real_t t,
 void ParTimeDepBlockNonlinForm::ResetGradient()
 {
    hasGrad = false;
+   gradCalls = 0;
 }
 
 // Block T-Vector to Block T-Vector
@@ -339,6 +454,7 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
       const int bdr_attr = mesh->GetBdrAttribute(i);
       bool weakBC = false;
       bool blowingBC = false;
+      bool normalBC = false;
       for (int b=0; b<weakBCBdr.Size(); ++b)
       {
          if ( bdr_attr == weakBCBdr[b]) { weakBC = true; }
@@ -347,7 +463,11 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
       {
          if ( bdr_attr == blowingBdr[b]) { blowingBC = true; }
       }
-      if ( !weakBC && !blowingBC ) { continue; }
+      for (int b=0; b<normalBCBdr.Size(); ++b)
+      {
+         if ( bdr_attr == normalBCBdr[b]) { normalBC = true; }
+      }
+      if ( !weakBC && !blowingBC && !normalBC) { continue; }
 
       // Perform assembly over Dirichlet boundary
       Tr = mesh->GetBdrFaceTransformations(i);
@@ -369,9 +489,17 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
             }
          }
 
-         integrator.AssembleWeakDirBCVector(fe, fe2, *Tr,
-                                            el_x_const, el_dx_const, el_y,
-                                            blowingBC);
+         if (normalBC)
+         {
+            integrator.AssembleNormalBCVector(fe, fe2, *Tr,
+                                              el_x_const, el_dx_const, el_y);
+         }
+         else
+         {
+            integrator.AssembleWeakDirBCVector(fe, fe2, *Tr,
+                                               el_x_const, el_dx_const, el_y,
+                                               blowingBC);
+         }
 
          for (int s=0; s<fes.Size(); ++s)
          {
@@ -397,7 +525,12 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
 // Get Gradient
 BlockOperator & ParTimeDepBlockNonlinForm::GetGradient(const Vector &x) const
 {
-   //  if (hasGrad) return *pBlockGrad;
+   if (hasGrad && gradCalls < -1)
+   {
+      gradCalls++;
+      return *pBlockGrad;
+   }
+   gradCalls = 0;
 
    if (pBlockGrad == NULL)
    {
@@ -654,6 +787,7 @@ void ParTimeDepBlockNonlinForm
       const int bdr_attr = mesh->GetBdrAttribute(i);
       bool weakBC = false;
       bool blowingBC = false;
+      bool normalBC = false;
       for (int b=0; b<weakBCBdr.Size(); ++b)
       {
          if ( bdr_attr == weakBCBdr[b]) { weakBC = true; }
@@ -662,7 +796,11 @@ void ParTimeDepBlockNonlinForm
       {
          if ( bdr_attr == blowingBdr[b]) { blowingBC = true; }
       }
-      if ( !weakBC && !blowingBC ) { continue; }
+      for (int b=0; b<normalBCBdr.Size(); ++b)
+      {
+         if ( bdr_attr == normalBCBdr[b]) { normalBC = true; }
+      }
+      if ( !weakBC && !blowingBC && !normalBC) { continue; }
 
       Tr = mesh->GetBdrFaceTransformations(i);
       if (Tr != NULL)
@@ -683,9 +821,18 @@ void ParTimeDepBlockNonlinForm
             }
          }
 
-         integrator.AssembleWeakDirBCGrad(fe, fe2, *Tr,
-                                          el_x_const, el_dx_const, elmats,
-                                          blowingBC);
+         if (normalBC)
+         {
+            integrator.AssembleNormalBCGrad(fe, fe2, *Tr,
+                                            el_x_const, el_dx_const, elmats);
+         }
+         else
+         {
+            integrator.AssembleWeakDirBCGrad(fe, fe2, *Tr,
+                                             el_x_const, el_dx_const, elmats,
+                                             blowingBC);
+         }
+
 
          for (int l=0; l<fes.Size(); ++l)
          {
