@@ -53,7 +53,7 @@ void CheckBoundaries(Array<bool> &bnd_flags,
 
 // Routine for pretty printing boundary forces to screen
 void PrintForce(const Array<int>& bdr_attributes,
-                const Vector& bdrForce)
+                const DenseMatrix& bdrForce)
 {
    // Print line lambda function
    auto pline = [](int len)
