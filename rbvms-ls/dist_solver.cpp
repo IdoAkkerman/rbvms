@@ -431,7 +431,7 @@ void ConvectionDistanceSolver::CorrectVolume(ParGridFunction &distance0,
    real_t jac = ComputeVolumeJac(distance1, jacEps_vc);
 
    // Print header
-   if(Mpi::Root())
+   if (Mpi::Root())
    {
       mfem::out<<"\n Volume conservation \n"
                <<std::setw(6) <<" Iter"
@@ -444,7 +444,7 @@ void ConvectionDistanceSolver::CorrectVolume(ParGridFunction &distance0,
    for (int it = 0; it < maxIter_vc; it++)
    {
       // Print convergence info
-      if(Mpi::Root())
+      if (Mpi::Root())
       {
          mfem::out<<std::setw(6)<<it
                   <<std::setw(10)<<std::defaultfloat<<std::setprecision(4)
@@ -459,7 +459,7 @@ void ConvectionDistanceSolver::CorrectVolume(ParGridFunction &distance0,
 
       // Correct, check and recompute
       distance1 -= (vol1 - vol0)/jac;
-      if (fabs(vol1 - vol0) < relTol_vc*vol0) break;
+      if (fabs(vol1 - vol0) < relTol_vc*vol0) { break; }
       vol1 = ComputeVolume(distance1);
    }
 }
