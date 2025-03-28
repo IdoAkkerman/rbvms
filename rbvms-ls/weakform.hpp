@@ -108,6 +108,9 @@ public:
    /// Set kbc parameters
    void SetKDCParams(real_t k0, real_t k1) { kdc0 = k0; kdc1 = k1; };
 
+   void SetInconsistentDC(real_t k0) { kdc0 = k0; };
+   void SetConsistentDC(real_t k1) { kdc1 = k1; };
+
    /// Set the timestep size @a dt_
    void SetTimeAndStep(const real_t &t, const real_t &dt_)
    {
@@ -124,7 +127,6 @@ public:
    void AssembleElementEnergy(const Array<const FiniteElement *>&el,
                               ElementTransformation &Tr,
                               const Array<const Vector *> &elfun,
-                              const Array<const Vector *> &elrate,
                               Vector &energy);
 
    /// Assemble the element interior residual vectors
@@ -181,11 +183,11 @@ public:
 
    /// Assemble the normal Dirichlet BC boundary residual vectors
    void AssembleNormalBCVector(const Array<const FiniteElement *> &el1,
-                                const Array<const FiniteElement *> &el2,
-                                FaceElementTransformations &Tr,
-                                const Array<const Vector *> &elfun,
-                                const Array<const Vector *> &elrate,
-                                const Array<Vector *> &elvect);
+                               const Array<const FiniteElement *> &el2,
+                               FaceElementTransformations &Tr,
+                               const Array<const Vector *> &elfun,
+                               const Array<const Vector *> &elrate,
+                               const Array<Vector *> &elvect);
 
    /// Assemble the normal Dirichlet BC boundary gradient matrices
    void AssembleNormalBCGrad(const Array<const FiniteElement *>&el1,

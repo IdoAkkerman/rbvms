@@ -155,7 +155,6 @@ void IncNavStoIntegrator::AssembleElementEnergy(
    const Array<const FiniteElement *>&el,
    ElementTransformation &Tr,
    const Array<const Vector *> &elsol,
-   const Array<const Vector *> &elrate,
    Vector &energy)
 {
    if (el.Size() != 3)
@@ -180,7 +179,6 @@ void IncNavStoIntegrator::AssembleElementEnergy(
    energy = 0.0;
 
    elf_u.UseExternalData(elsol[0]->GetData(), dof_u, dim);
-   elf_du.UseExternalData(elrate[0]->GetData(), dof_u, dim);
 
    sh_u.SetSize(dof_u);
    shg_u.SetSize(dof_u, dim);
@@ -222,7 +220,6 @@ void IncNavStoIntegrator::AssembleElementEnergy(
 
       el[2]->CalcPhysShape(Tr, sh_phi);
       real_t phi = sh_phi*(*elsol[2]);
-      real_t dphidt = sh_phi*(*elrate[2]);
 
       el[2]->CalcPhysDShape(Tr, shg_phi);
       shg_phi.MultTranspose(*elsol[2], grad_phi);
@@ -579,9 +576,9 @@ void IncNavStoIntegrator::AssembleElementGrad(
 
       // Level - set - Block diagonal level-set block (v,phi)
 
-  //   real_t res_ls = dphidt + u*grad_phi;
-   //   elvec[2]->Add(w*res_ls, sh_phi);            // Add Galerkin term
-   //   elvec[2]->Add(w*res_ls*tau_ls, ushg_phi);   // Add SUPG term
+      //   real_t res_ls = dphidt + u*grad_phi;
+      //   elvec[2]->Add(w*res_ls, sh_phi);            // Add Galerkin term
+      //   elvec[2]->Add(w*res_ls*tau_ls, ushg_phi);   // Add SUPG term
 
       // Galerkin terms
       AddMult_a_VVt(w, sh_phi, mat_vphi);
@@ -597,17 +594,17 @@ void IncNavStoIntegrator::AssembleElementGrad(
       for (int i_dim = 0; i_dim < dim; ++i_dim)
       {
          real_t tmp = dt*w*grad_phi(i_dim);
-        // AddMult_a_VWt(tmp,        sh_phi,   sh_u, mat_vu1[i_dim]);
+         // AddMult_a_VWt(tmp,        sh_phi,   sh_u, mat_vu1[i_dim]);
          //AddMult_a_VWt(tmp*tau_ls, ushg_phi, sh_u, mat_vu1[i_dim]);
          AddMult_a_VWt(tmp,        sh_u,sh_phi,    mat_vu1[i_dim]);
          AddMult_a_VWt(tmp*tau_ls, sh_u,ushg_phi,  mat_vu1[i_dim]);
 
          shg_phi.GetColumn(i_dim,col);
-      //   AddMult_a_VWt(dt*w*tau_ls*res_ls, col, sh_u, mat_vu1[i_dim]);
- AddMult_a_VWt(dt*w*tau_ls*res_ls, sh_u, col,  mat_vu1[i_dim]);
+         //   AddMult_a_VWt(dt*w*tau_ls*res_ls, col, sh_u, mat_vu1[i_dim]);
+         AddMult_a_VWt(dt*w*tau_ls*res_ls, sh_u, col,  mat_vu1[i_dim]);
       }
 
-       // Cross term Momentem Galerkin wrt phi
+      // Cross term Momentem Galerkin wrt phi
       for (int i_dim = 0; i_dim < dim; ++i_dim)
       {
          AddMult_a_VVt(drho*dt*w*bla[i_dim], sh_u, mat_wphi1[i_dim]);
@@ -725,7 +722,7 @@ void IncNavStoIntegrator
 
       CalcOrtho(Tr.Jacobian(), nor); // nor = n.da
       real_t w = ip.weight;          // No weight --> taken care of by nor
-     // real_t hbc = c_hbc.Eval(Tr, ip);
+      // real_t hbc = c_hbc.Eval(Tr, ip);
       MultAtB(Tr.Elem1->InverseJacobian(),Tr.Elem1->InverseJacobian(),Gij);
 
       el1[0]->CalcPhysShape(*Tr.Elem1, sh_u);
@@ -749,11 +746,11 @@ void IncNavStoIntegrator
          outflow += rho * un * w; // No weight --> taken care of by nor
       }
 
-      if (un > 0.0) { continue; }  
+      if (un > 0.0) { continue; }
 
       c_sol_u.Eval(up, *Tr.Elem1, eip);
       up -= u;
-     // up.Neg();
+      // up.Neg();
 
 
       AddMult_a_VWt(rho*w*un, sh_u, up, elv_u);
@@ -845,22 +842,22 @@ void IncNavStoIntegrator
       }
 
       // Jacobian due to the normal velocity
-   /*   for (int dim_v = 0; dim_v < dim; ++dim_v)
-      {
-         real_t tmp0 = rho*nor(dim_v)*w*dt;
-         for (int j_u = 0; j_u < dof_u; ++j_u)
+      /*   for (int dim_v = 0; dim_v < dim; ++dim_v)
          {
-            real_t tmp1 = tmp0*sh_u(j_u);
-            for (int dim_u = 0; dim_u < dim; ++dim_u)
+            real_t tmp0 = rho*nor(dim_v)*w*dt;
+            for (int j_u = 0; j_u < dof_u; ++j_u)
             {
-               real_t tmp2 = tmp1*u(dim_u);
-               for (int i_u = 0; i_u < dof_u; ++i_u)
+               real_t tmp1 = tmp0*sh_u(j_u);
+               for (int dim_u = 0; dim_u < dim; ++dim_u)
                {
-                  mat_wu(i_u + dim_u*dof_u, j_u + dim_v*dof_u) += sh_u(i_u)*tmp2;
+                  real_t tmp2 = tmp1*u(dim_u);
+                  for (int i_u = 0; i_u < dof_u; ++i_u)
+                  {
+                     mat_wu(i_u + dim_u*dof_u, j_u + dim_v*dof_u) += sh_u(i_u)*tmp2;
+                  }
                }
             }
-         }
-      }*/
+         }*/
    }
 }
 
@@ -1199,10 +1196,10 @@ void IncNavStoIntegrator
       //
       for (int j = 0; j < dof_phi; ++j)
       {
-        // real_t tmp = -un*w*dt;
+         // real_t tmp = -un*w*dt;
          for (int i = 0; i < dof_phi; ++i)
          {
-             mat_vphi(i, j) -= sh_phi(i)*sh_phi(j)*un*w*dt;
+            mat_vphi(i, j) -= sh_phi(i)*sh_phi(j)*un*w*dt;
          }
       }
 
@@ -1366,8 +1363,8 @@ void IncNavStoIntegrator
             int j_dof = j_u + j_dim*dof_u;
             for (int i_u = 0; i_u < dof_u; ++i_u)
             {
-              for (int i_dim = 0; i_dim < dim; ++i_dim)
-              {
+               for (int i_dim = 0; i_dim < dim; ++i_dim)
+               {
                   mat_wu(i_u + i_dim*dof_u, j_dof)
                   += sh_u(i_u)*nor(i_dim)*tmp1;
                }

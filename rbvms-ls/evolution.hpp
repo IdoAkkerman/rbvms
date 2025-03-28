@@ -33,7 +33,7 @@ private:
 public:
    // Constructor, provide MPI context and component subdivision
    NewtonSystemSolver(MPI_Comm comm_, Array<int> &offsets)
-      : NewtonSolver(comm_), bOffsets(offsets) 
+      : NewtonSolver(comm_), bOffsets(offsets)
    {
       nvar = bOffsets.Size()-1;
    }
@@ -70,15 +70,15 @@ public:
                               Vector &k) override;
 
    /// Get the energy
-   Vector GetEnergy() const;
+   Vector GetEnergy(const Vector &x) const;
 
-   /// Get the CFL Number
+   /// Get the CFL number from the formulation
    real_t GetCFL() const;
 
-   /// Get the Outflow
+   /// Get the CFL number from the formulation
    real_t GetOutflow() const;
 
-   /// Get the Force on each of the boundaries
+   /// Get the boundary forces from the formulation
    DenseMatrix GetForce() const;
 
    /// Destructor
@@ -131,6 +131,9 @@ public:
    void SetSuctionBC(Array<int> suction_bdr) { suction_bdr.Copy(suctionBdr);};
    void SetBlowingBC(Array<int> blowing_bdr) { blowing_bdr.Copy(blowingBdr);};
 
+   void SetInconsistentDC(real_t k0) { integrator.SetInconsistentDC(k0); };
+   void SetConsistentDC(real_t k1) { integrator.SetConsistentDC(k1); };
+
    /// Set the solution of the previous time step @a x0
    /// and the timestep size @a dt of the current solve.
    void SetTimeAndSolution(const real_t t,
@@ -149,7 +152,7 @@ public:
    DenseMatrix& GetForce() { return bdrForce;};
 
    /// Block T-Vector to Vector
-   void Energy(const Vector &x, Vector &energy) const;
+   Vector Energy(const Vector &x) const;
 
    /// Block T-Vector to Block T-Vector
    void Mult(const Vector &x, Vector &y) const;
