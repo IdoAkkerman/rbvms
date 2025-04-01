@@ -12,15 +12,13 @@
 // RBVMS is free software; you can redistribute it and/or modify it under the
 // terms of the BSD-3 license.
 //------------------------------------------------------------------------------
-
-#include "mfem.hpp"
-#include "coefficients.hpp"
-#include "weakform.hpp"
-#include "evolution.hpp"
-#include "precon.hpp"
-#include "monitor.hpp"
-
 #include <sys/stat.h>
+#include "mfem.hpp"
+#include "../util/coefficients.hpp"
+#include "../util/solver.hpp"
+
+#include "formulation.hpp"
+#include "integrator.hpp"
 
 using namespace std;
 using namespace mfem;
@@ -306,7 +304,7 @@ int main(int argc, char *argv[])
    jac_prec.SetPreconditioner(1, pc_cont);
 
    // Set up the Jacobian solver
-   RBVMS::GeneralResidualMonitor j_monitor(MPI_COMM_WORLD,"\t\tFGMRES", 10);
+   RBVMS::GeneralResidualMonitor j_monitor("\t\tFGMRES", 10);
    FGMRESSolver j_gmres(MPI_COMM_WORLD);
    j_gmres.iterative_mode = false;
    j_gmres.SetRelTol(GMRES_RelTol);
@@ -317,13 +315,9 @@ int main(int argc, char *argv[])
    j_gmres.SetPreconditioner(jac_prec);
 
    // Set up the Newton solver
-   RBVMS::SystemResidualMonitor newton_monitor(MPI_COMM_WORLD,
-                                               "Newton", 1,
-                                               bOffsets);
-   NewtonSolver newton_solver(MPI_COMM_WORLD);
+   RBVMS::NewtonSystemSolver newton_solver(MPI_COMM_WORLD,bOffsets);
    newton_solver.iterative_mode = true;
-   newton_solver.SetPrintLevel(-1);
-   newton_solver.SetMonitor(newton_monitor);
+   newton_solver.SetPrintLevel(1);
    newton_solver.SetRelTol(Newton_RelTol);
    newton_solver.SetAbsTol(1e-12);
    newton_solver.SetMaxIter(Newton_MaxIter );
@@ -339,7 +333,7 @@ int main(int argc, char *argv[])
 
    // Define weak form and evolution
    RBVMS::IncNavStoIntegrator integrator(rho, mu, force, sol, suction, blowing);
-   RBVMS::ParTimeDepBlockNonlinForm form(spaces, integrator);
+   RBVMS::NavStoForm form(spaces, integrator);
    RBVMS::Evolution evo(form, newton_solver);
    ode_solver->Init(evo);
 
@@ -503,9 +497,9 @@ int main(int argc, char *argv[])
       si++;
 
       // Postprocess solution
-      real_t cfl = evo.GetCFL();
-      real_t outflow = evo.GetOutflow();
-      DenseMatrix bdrForce = evo.GetForce();
+      real_t cfl = form.GetCFL();
+      real_t outflow = form.GetOutflow();
+      DenseMatrix bdrForce = form.GetForce();
       if (Mpi::Root())
       {
          // Print to file

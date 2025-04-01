@@ -26,7 +26,7 @@ void LibCoefficient::GetLibFunction(string libName,
          mfem_error("Can not obtain required function.\n");
       }
       cout <<"Functions:";
-      for (int i = 0; i < funNames.size();i++)
+      for (int i = 0; i < funNames.size(); i++)
       {
          cout<<" "<<funNames[i];
       }
@@ -36,17 +36,17 @@ void LibCoefficient::GetLibFunction(string libName,
 
    // Search Function
    TDFunction = nullptr;
-   for (int i = 0; i < funNames.size();i++)
+   for (int i = 0; i < funNames.size(); i++)
    {
       TDFunction = (TDFunPtr)dlsym(libHandle, funNames[i].c_str());
-      if (TDFunction) break;
+      if (TDFunction) { break; }
    }
 
    // Check if function is found
    if (!TDFunction)
    {
       cout <<"Functions:";
-      for (int i = 0; i < funNames.size();i++)
+      for (int i = 0; i < funNames.size(); i++)
       {
          cout<<" "<<funNames[i];
       }
@@ -65,7 +65,7 @@ real_t LibCoefficient::Eval(ElementTransformation &T,
                             const IntegrationPoint &ip)
 {
    // Homegenous if not defined
-   if (!TDFunction) return val;
+   if (!TDFunction) { return val; }
 
    // Evaluate library function
    T.Transform(ip, x);
@@ -75,7 +75,7 @@ real_t LibCoefficient::Eval(ElementTransformation &T,
 // Destructor
 LibCoefficient::~LibCoefficient()
 {
-   if (libHandle) dlclose(libHandle);
+   if (libHandle) { dlclose(libHandle); }
 }
 
 
@@ -94,7 +94,7 @@ void LibVectorCoefficient::GetLibFunction(string libName,
          mfem_error("Can not obtain required function.\n");
       }
       cout <<"Functions:";
-      for (int i = 0; i < funNames.size();i++)
+      for (int i = 0; i < funNames.size(); i++)
       {
          cout<<" "<<funNames[i];
       }
@@ -104,17 +104,17 @@ void LibVectorCoefficient::GetLibFunction(string libName,
 
    // Search Function
    TDFunction = nullptr;
-   for (int i = 0; i < funNames.size();i++)
+   for (int i = 0; i < funNames.size(); i++)
    {
       TDFunction = (TDFunPtr)dlsym(libHandle, funNames[i].c_str());
-      if (TDFunction) break;
+      if (TDFunction) { break; }
    }
 
    // Check if function is found
    if (!TDFunction)
    {
       cout <<"Functions:";
-      for (int i = 0; i < funNames.size();i++)
+      for (int i = 0; i < funNames.size(); i++)
       {
          cout<<" "<<funNames[i];
       }
@@ -148,5 +148,5 @@ void LibVectorCoefficient::Eval(Vector &V,
 //  Destructor
 LibVectorCoefficient::~LibVectorCoefficient()
 {
-   if (libHandle) dlclose(libHandle);
+   if (libHandle) { dlclose(libHandle); }
 }

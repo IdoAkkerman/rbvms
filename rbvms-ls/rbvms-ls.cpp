@@ -12,16 +12,14 @@
 // RBVMS is free software; you can redistribute it and/or modify it under the
 // terms of the BSD-3 license.
 //------------------------------------------------------------------------------
-
-#include "mfem.hpp"
-#include "coefficients.hpp"
-#include "weakform.hpp"
-#include "evolution.hpp"
-#include "precon.hpp"
-#include "monitor.hpp"
-#include "dist_solver.hpp"
-
 #include <sys/stat.h>
+#include "mfem.hpp"
+#include "../util/coefficients.hpp"
+#include "../util/solver.hpp"
+
+#include "dist_solver.hpp"
+#include "formulation.hpp"
+#include "integrator.hpp"
 
 using namespace std;
 using namespace mfem;
@@ -613,7 +611,7 @@ int main(int argc, char *argv[])
    jac_prec.SetPreconditioner(2, pc_ls);
 
    // Set up the Jacobian solver
-   RBVMS::GeneralResidualMonitor j_monitor(MPI_COMM_WORLD,"\t\tFGMRES", 10);
+   RBVMS::GeneralResidualMonitor j_monitor("\t\tFGMRES", 10);
    FGMRESSolver gmres(MPI_COMM_WORLD);
    gmres.iterative_mode = false;
    gmres.SetRelTol(GMRES_RelTol);
@@ -643,7 +641,7 @@ int main(int argc, char *argv[])
    RBVMS::IncNavStoIntegrator integrator(rho, mu, force,
                                          sol_u, sol_phi,
                                          suction, blowing);
-   RBVMS::ParTimeDepBlockNonlinForm form(spaces, integrator);
+   RBVMS::NavStoLSForm form(spaces, integrator);
    RBVMS::Evolution evo(form, newton_solver);
    ode_solver->Init(evo);
 
@@ -663,10 +661,10 @@ int main(int argc, char *argv[])
    dist_solver.SetInconsistentDC(Redist_kdc0);
    dist_solver.SetConsistentDC(Redist_kdc1);
 
-   RBVMS::GeneralResidualMonitor dist_monitor(MPI_COMM_WORLD,
-                                              " - Redistance",
-                                              1);
-   dist_solver.SetNonlinearMonitor(dist_monitor);
+//   RBVMS::GeneralResidualMonitor dist_monitor(MPI_COMM_WORLD,
+//                                              " - Redistance",
+//                                              1);
+//   dist_solver.SetNonlinearMonitor(dist_monitor);
    dist_solver.SetLinearRelTol(Redist_GMRES_RelTol);
    dist_solver.SetLinearMaxIter(Redist_GMRES_MaxIter);
    dist_solver.SetNonlinearRelTol(Redist_Newton_RelTol);
@@ -745,7 +743,7 @@ int main(int argc, char *argv[])
       real_t dt0 = dt;
       if (dt_gain > 0)
       {
-         real_t cfl = evo.GetCFL();
+         real_t cfl = form.GetCFL();
          dt *= pow(cfl_target/cfl, dt_gain);
          dt = min(dt, dt_max);
          dt = max(dt, dt_min);
@@ -791,10 +789,10 @@ int main(int argc, char *argv[])
       }
 
       // Postprocess solution
-      real_t cfl = evo.GetCFL();
-      real_t outflow = evo.GetOutflow();
-      Vector energy = evo.GetEnergy(xp);
-      DenseMatrix bdrForce = evo.GetForce();
+      real_t cfl = form.GetCFL();
+      real_t outflow = form.GetOutflow();
+      Vector energy = form.GetEnergies(xp);
+      DenseMatrix bdrForce = form.GetForce();
 
       // Write to file
       output.Print(si, t, dt, cfl, outflow, energy, bdrForce);

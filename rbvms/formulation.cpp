@@ -5,66 +5,14 @@
 // terms of the BSD-3 license.
 //------------------------------------------------------------------------------
 
-#include "evolution.hpp"
+#include "formulation.hpp"
 
 using namespace mfem;
 using namespace RBVMS;
 
-// Evolution Constructor
-Evolution::Evolution(ParTimeDepBlockNonlinForm &form,
-                     IterativeSolver &solver)
-   : TimeDependentOperator(form.Width(), 0.0, IMPLICIT),
-     form(form), solver(solver), dudt(form.Width())
-{
-   solver.SetOperator(form);
-   dudt = 0.0;
-}
-
-// Solve time dependent problem
-void Evolution::ImplicitSolve(const real_t dt,
-                              const Vector &u0, Vector &dudt_)
-{
-   form.ResetGradient();
-   form.SetTimeAndSolution(t, dt, u0);
-   Vector zero;
-   dudt = 0.0;
-   solver.Mult(zero, dudt);
-   dudt_ = dudt;
-   if (Mpi::Root())
-   {
-      std::cout<<"\n\tTotal # Newton iterations = "
-               <<solver.GetNumIterations()<<endl;
-   }
-}
-
-// Get the CFL number from the formulation
-real_t Evolution::GetCFL() const
-{
-   return form.GetCFL();
-}
-
-// Get the CFL number from the formulation
-real_t Evolution::GetOutflow() const
-{
-   return form.GetOutflow();
-}
-
-// Get the boundary forces from the formulation
-DenseMatrix Evolution::GetForce()
-{
-   return form.GetForce();
-}
-
-// Formulation Constructor
-ParTimeDepBlockNonlinForm::
-   ParTimeDepBlockNonlinForm(Array<ParFiniteElementSpace *> &pfes,
-                             RBVMS::IncNavStoIntegrator &integrator)
-   : ParBlockNonlinearForm(pfes), integrator(integrator), hasGrad(false)
-{
-}
 
 // Set the boundaries were strong Dirichlet BCs are imposed
-void ParTimeDepBlockNonlinForm::SetStrongBC (Array<int> strong_bdr)
+void NavStoForm::SetStrongBC (Array<int> strong_bdr)
 {
    strong_bdr.Copy(strongBCBdr);
 
@@ -93,53 +41,47 @@ void ParTimeDepBlockNonlinForm::SetStrongBC (Array<int> strong_bdr)
 }
 
 // Set the boundaries were weak Dirichlet BCs are imposed
-void ParTimeDepBlockNonlinForm::SetWeakBC   (Array<int> weak_bdr)
+void NavStoForm::SetWeakBC   (Array<int> weak_bdr)
 {
    weak_bdr.Copy(weakBCBdr);
 }
 
 // Set the outflow boundaries
-void ParTimeDepBlockNonlinForm::SetOutflowBC(Array<int> outflow_bdr)
+void NavStoForm::SetOutflowBC(Array<int> outflow_bdr)
 {
    outflow_bdr.Copy(outflowBdr);
 }
 
 // Set the suction boundaries
-void ParTimeDepBlockNonlinForm::SetSuctionBC(Array<int> suction_bdr)
+void NavStoForm::SetSuctionBC(Array<int> suction_bdr)
 {
    suction_bdr.Copy(suctionBdr);
 }
 
 // Set the blowing boundaries
-void ParTimeDepBlockNonlinForm::SetBlowingBC(Array<int> blowing_bdr)
+void NavStoForm::SetBlowingBC(Array<int> blowing_bdr)
 {
    blowing_bdr.Copy(blowingBdr);
 }
 
 // Set the solution of the previous time step
 // and the timestep size of the current solve.
-void ParTimeDepBlockNonlinForm::SetTimeAndSolution(const real_t t,
-                                                   const real_t dt_,
-                                                   const Vector &x0)
+void NavStoForm::SetTimeAndSolution(const real_t t,
+                                    const real_t dt_,
+                                    const Vector &x0)
 {
    xs0.SetSize(block_offsets[1]);
    xs_true.Update(const_cast<Vector &>(x0), block_trueOffsets);
 
    fes[0]->GetProlongationMatrix()->Mult(
-         xs_true.GetBlock(0), xs0);
+      xs_true.GetBlock(0), xs0);
 
    dt = dt_;
    integrator.SetTimeAndStep(t,dt);
 }
 
-// Clear the gradient matrix
-void ParTimeDepBlockNonlinForm::ResetGradient()
-{
-   hasGrad = false;
-}
-
 // Block T-Vector to Block T-Vector
-void ParTimeDepBlockNonlinForm::Mult(const Vector &dx, Vector &y) const
+void NavStoForm::Mult(const Vector &dx, Vector &y) const
 {
    // dxs_true is not modified, so const_cast is okay
    dxs_true.Update(const_cast<Vector &>(dx), block_trueOffsets);
@@ -149,12 +91,12 @@ void ParTimeDepBlockNonlinForm::Mult(const Vector &dx, Vector &y) const
    ys.Update(block_offsets);
 
    fes[0]->GetProlongationMatrix()->Mult(
-         dxs_true.GetBlock(0), dxs.GetBlock(0));
+      dxs_true.GetBlock(0), dxs.GetBlock(0));
 
    add(xs0,dt,dxs.GetBlock(0),xs.GetBlock(0));   // x = x0 + dt*dx
 
    fes[1]->GetProlongationMatrix()->Mult(
-         dxs_true.GetBlock(1), xs.GetBlock(1));
+      dxs_true.GetBlock(1), xs.GetBlock(1));
 
    // Actual assembly
    MultBlocked(xs, dxs, ys);
@@ -186,9 +128,9 @@ void ParTimeDepBlockNonlinForm::Mult(const Vector &dx, Vector &y) const
 }
 
 // Specialized version of Mult() for BlockVectors
-void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
-                                            const BlockVector &bdx,
-                                            BlockVector &by) const
+void NavStoForm::MultBlocked(const BlockVector &bx,
+                             const BlockVector &bdx,
+                             BlockVector &by) const
 {
    Array<Array<int> *>vdofs(fes.Size());
    Array<Array<int> *>vdofs2(fes.Size());
@@ -230,7 +172,7 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
          bdx.GetBlock(s).GetSubVector(*(vdofs[s]), *el_dx[s]);
          if (doftrans[s])
          {
-            MFEM_WARNING("ParTimeDepBlockNonlinForm::Doftrans");
+            MFEM_WARNING("NavStoForm::Doftrans");
             doftrans[s]->InvTransformPrimal(*el_x[s]);
             doftrans[s]->InvTransformPrimal(*el_dx[s]);
          }
@@ -261,11 +203,11 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
       bool suctionBC = false;
       for (int b=0; b<outflowBdr.Size(); ++b)
       {
-        if ( bdr_attr == outflowBdr[b]) { outflowBC = true; }
+         if ( bdr_attr == outflowBdr[b]) { outflowBC = true; }
       }
       for (int b=0; b<suctionBdr.Size(); ++b)
       {
-        if ( bdr_attr == suctionBdr[b]) { suctionBC= true; }
+         if ( bdr_attr == suctionBdr[b]) { suctionBC= true; }
       }
       if ( !outflowBC && !suctionBC ) { continue; }
 
@@ -283,7 +225,7 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
             bdx.GetBlock(s).GetSubVector(*(vdofs[s]), *el_dx[s]);
             if (doftrans[s])
             {
-               MFEM_WARNING("ParTimeDepBlockNonlinForm::Doftrans");
+               MFEM_WARNING("NavStoForm::Doftrans");
                doftrans[s]->InvTransformPrimal(*el_x[s]);
                doftrans[s]->InvTransformPrimal(*el_dx[s]);
             }
@@ -352,7 +294,7 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
             bdx.GetBlock(s).GetSubVector(*(vdofs[s]), *el_dx[s]);
             if (doftrans[s])
             {
-               MFEM_WARNING("ParTimeDepBlockNonlinForm::Doftrans");
+               MFEM_WARNING("NavStoForm::Doftrans");
                doftrans[s]->InvTransformPrimal(*el_x[s]);
                doftrans[s]->InvTransformPrimal(*el_dx[s]);
             }
@@ -383,9 +325,9 @@ void ParTimeDepBlockNonlinForm::MultBlocked(const BlockVector &bx,
 }
 
 // Get Gradient
-BlockOperator & ParTimeDepBlockNonlinForm::GetGradient(const Vector &x) const
+BlockOperator & NavStoForm::GetGradient(const Vector &x) const
 {
-   if (hasGrad) return *pBlockGrad;
+   if (hasGrad) { return *pBlockGrad; }
 
    if (pBlockGrad == NULL)
    {
@@ -454,8 +396,8 @@ BlockOperator & ParTimeDepBlockNonlinForm::GetGradient(const Vector &x) const
 }
 
 // Return the local gradient matrix for the given true-dof vector x
-const BlockOperator& ParTimeDepBlockNonlinForm
-   ::GetLocalGradient(const Vector &dx) const
+const BlockOperator& NavStoForm
+::GetLocalGradient(const Vector &dx) const
 {
    // dxs_true is not modified, so const_cast is okay
    dxs_true.Update(const_cast<Vector &>(dx), block_trueOffsets);
@@ -463,12 +405,12 @@ const BlockOperator& ParTimeDepBlockNonlinForm
    dxs.Update(block_offsets);
 
    fes[0]->GetProlongationMatrix()->Mult(
-         dxs_true.GetBlock(0), dxs.GetBlock(0));
+      dxs_true.GetBlock(0), dxs.GetBlock(0));
 
    add(xs0,dt,dxs.GetBlock(0),xs.GetBlock(0));   // x = x0 + dt*dx
 
    fes[1]->GetProlongationMatrix()->Mult(
-         dxs_true.GetBlock(1), xs.GetBlock(1));
+      dxs_true.GetBlock(1), xs.GetBlock(1));
 
    // (re)assemble Grad without b.c. into 'Grads'
    ComputeGradientBlocked(xs, dxs);
@@ -487,9 +429,9 @@ const BlockOperator& ParTimeDepBlockNonlinForm
 }
 
 // Specialized version of GetGradient() for BlockVector
-void ParTimeDepBlockNonlinForm
-   ::ComputeGradientBlocked(const BlockVector &bx,
-                            const BlockVector &bdx) const
+void NavStoForm
+::ComputeGradientBlocked(const BlockVector &bx,
+                         const BlockVector &bdx) const
 {
    const int skip_zeros = 0;
    Array<Array<int> *> vdofs(fes.Size());
@@ -546,7 +488,7 @@ void ParTimeDepBlockNonlinForm
          bdx.GetBlock(s).GetSubVector(*vdofs[s], *el_dx[s]);
          if (doftrans[s])
          {
-            MFEM_WARNING("ParTimeDepBlockNonlinForm::Doftrans");
+            MFEM_WARNING("NavStoForm::Doftrans");
             doftrans[s]->InvTransformPrimal(*el_x[s]);
             doftrans[s]->InvTransformPrimal(*el_dx[s]);
          }
@@ -561,7 +503,7 @@ void ParTimeDepBlockNonlinForm
             if (elmats(j,l)->Height() == 0) { continue; }
             if (doftrans[j] || doftrans[l])
             {
-               MFEM_WARNING("ParTimeDepBlockNonlinForm::Doftrans");
+               MFEM_WARNING("NavStoForm::Doftrans");
                TransformDual(doftrans[j], doftrans[l], *elmats(j,l));
             }
             Grads(j,l)->AddSubMatrix(*vdofs[j], *vdofs[l],
@@ -579,11 +521,11 @@ void ParTimeDepBlockNonlinForm
       bool suctionBC = false;
       for (int b=0; b<outflowBdr.Size(); ++b)
       {
-        if ( bdr_attr == outflowBdr[b]) { outflowBC = true; }
+         if ( bdr_attr == outflowBdr[b]) { outflowBC = true; }
       }
       for (int b=0; b<suctionBdr.Size(); ++b)
       {
-        if ( bdr_attr == suctionBdr[b]) { suctionBC = true; }
+         if ( bdr_attr == suctionBdr[b]) { suctionBC = true; }
       }
 
       if ( !outflowBC && !suctionBC ) { continue; }
@@ -603,7 +545,7 @@ void ParTimeDepBlockNonlinForm
             bdx.GetBlock(s).GetSubVector(*(vdofs[s]), *el_dx[s]);
             if (doftrans[s])
             {
-               MFEM_WARNING("ParTimeDepBlockNonlinForm::Doftrans");
+               MFEM_WARNING("NavStoForm::Doftrans");
                doftrans[s]->InvTransformPrimal(*el_x[s]);
                doftrans[s]->InvTransformPrimal(*el_dx[s]);
             }
@@ -620,7 +562,7 @@ void ParTimeDepBlockNonlinForm
                if (elmats(j,l)->Height() == 0) { continue; }
                if (doftrans[j] || doftrans[l])
                {
-                  MFEM_WARNING("ParTimeDepBlockNonlinForm::Doftrans");
+                  MFEM_WARNING("NavStoForm::Doftrans");
                   TransformDual(doftrans[j], doftrans[l], *elmats(j,l));
                }
                Grads(j,l)->AddSubMatrix(*vdofs[j], *vdofs[l],
@@ -660,7 +602,7 @@ void ParTimeDepBlockNonlinForm
             bdx.GetBlock(s).GetSubVector(*(vdofs[s]), *el_dx[s]);
             if (doftrans[s])
             {
-               MFEM_WARNING("ParTimeDepBlockNonlinForm::Doftrans");
+               MFEM_WARNING("NavStoForm::Doftrans");
                doftrans[s]->InvTransformPrimal(*el_x[s]);
                doftrans[s]->InvTransformPrimal(*el_dx[s]);
             }
@@ -677,7 +619,7 @@ void ParTimeDepBlockNonlinForm
                if (elmats(j,l)->Height() == 0) { continue; }
                if (doftrans[j] || doftrans[l])
                {
-                  MFEM_WARNING("ParTimeDepBlockNonlinForm::Doftrans");
+                  MFEM_WARNING("NavStoForm::Doftrans");
                   TransformDual(doftrans[j], doftrans[l], *elmats(j,l));
                }
                Grads(j,l)->AddSubMatrix(*vdofs[j], *vdofs[l],

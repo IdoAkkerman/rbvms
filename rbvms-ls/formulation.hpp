@@ -5,56 +5,18 @@
 // terms of the BSD-3 license.
 //------------------------------------------------------------------------------
 
-#ifndef RBVMS_EVOLUTION_HPP
-#define RBVMS_EVOLUTION_HPP
+#ifndef RBVMS_LS_EVOLUTION_HPP
+#define RBVMS_LS_EVOLUTION_HPP
 
 #include "mfem.hpp"
-#include "weakform.hpp"
+#include "integrator.hpp"
+#include "../util/solver.hpp"
 
 using namespace std;
 using namespace mfem;
 
 namespace RBVMS
 {
-
-// Predefine class
-class ParTimeDepBlockNonlinForm;
-
-/** This class provide the correct interface between the time-dependent 
-    block nonlinear form (defined below) and the MFEM::ODESolver.
-*/
-class Evolution : public TimeDependentOperator
-{
-private:
-   ParTimeDepBlockNonlinForm &form;
-   IterativeSolver &solver;
-   Vector dudt;
-
-public:
-   /// Constructor
-   Evolution(ParTimeDepBlockNonlinForm &form,
-             IterativeSolver &solver);
-
-   /// Stub for explicit solve of time dependent problem
-   virtual void Mult(const Vector &x, Vector &k) const override { k = 0.0;};
-
-   /// Solve time dependent problem
-   virtual void ImplicitSolve(const real_t dt,
-                              const Vector &x,
-                              Vector &k) override;
-
-   /// Get the CFL Number
-   real_t GetCFL() const;
-
-   /// Get the Outflow
-   real_t GetOutflow() const;
-
-   /// Get the Force on each of the boundaries
-   DenseMatrix GetForce();
-
-   /// Destructor
-   ~Evolution() {}
-};
 
 
 /** This class is a specialized ParBlockNonlinearForm that includes timestepping
@@ -63,40 +25,50 @@ public:
 
     Both x and dx need to be passed to the FormIntegrator.
 */
-class ParTimeDepBlockNonlinForm : public ParBlockNonlinearForm
+class NavStoLSForm : public ParTimeDepBlockNonlinForm
 {
 private:
-   RBVMS::IncNavStoIntegrator &integrator;
+   IncNavStoIntegrator &integrator;
 
    /// Numerical parameters
    real_t dt;
    mutable real_t cfl, outflow;
 
+   /// Boundary parameters
    Array<int> strongBCBdr;
    Array<int> weakBCBdr;
+   Array<int> normalBCBdr;
    Array<int> outflowBdr;
    Array<int> suctionBdr;
    Array<int> blowingBdr;
 
    /// Solution & Residual vector
-   mutable Vector xs0;
+   mutable Vector xs0, xs2;
    mutable BlockVector dxs;
    mutable BlockVector dxs_true;
 
    /// Conservative boundary forces
    mutable DenseMatrix bdrForce;
    mutable bool hasGrad;
+   mutable int  gradCalls;
 
 public:
    /// Constructor
-   ParTimeDepBlockNonlinForm(Array<ParFiniteElementSpace *> &pfes,
-                             RBVMS::IncNavStoIntegrator &integrator);
+   NavStoLSForm(Array<ParFiniteElementSpace *> &pfes,
+                IncNavStoIntegrator &integ)
+      : ParTimeDepBlockNonlinForm(pfes), integrator(integ), hasGrad(false)
+   {
+   }
 
    void SetStrongBC (Array<int> strong_bdr);
-   void SetWeakBC   (Array<int> weak_bdr);
-   void SetOutflowBC(Array<int> outflow_bdr);
-   void SetSuctionBC(Array<int> suction_bdr);
-   void SetBlowingBC(Array<int> blowing_bdr);
+   void SetWeakBC   (Array<int> weak_bdr) { weak_bdr.Copy(weakBCBdr); };
+   void SetNormalBC   (Array<int> nor_bdr) { nor_bdr.Copy(normalBCBdr);};
+   void SetOutflowBC(Array<int> outflow_bdr) { outflow_bdr.Copy(outflowBdr);};
+   void SetSuctionBC(Array<int> suction_bdr) { suction_bdr.Copy(suctionBdr);};
+   void SetBlowingBC(Array<int> blowing_bdr) { blowing_bdr.Copy(blowingBdr);};
+
+   void SetInconsistentDC(real_t k0) { integrator.SetInconsistentDC(k0); };
+   void SetConsistentDC(real_t k1) { integrator.SetConsistentDC(k1); };
 
    /// Set the solution of the previous time step @a x0
    /// and the timestep size @a dt of the current solve.
@@ -115,8 +87,8 @@ public:
    /// Get the conservative boundary forces
    DenseMatrix& GetForce() { return bdrForce;};
 
-   /// Specialized version of GetEnergy() for BlockVectors
-   //real_t GetEnergyBlocked(const BlockVector &bx) const;
+   /// Block T-Vector to Vector
+   Vector GetEnergies(const Vector &x) const;
 
    /// Block T-Vector to Block T-Vector
    void Mult(const Vector &x, Vector &y) const;

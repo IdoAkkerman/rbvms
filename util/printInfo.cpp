@@ -8,13 +8,20 @@
 #if __has_include("buildInfo.hpp")
 #include "buildInfo.hpp"
 #else
-#include "noInfo.hpp"
+#include <string>
+#include <fstream>
+#include <sstream>
+std::istringstream buildInfo(R"~(
+------------------------------------
+No build information
+------------------------------------
+)~");
 #endif
 
 #if defined(_WIN32)
-#include <winsock.h>
+   #include <winsock.h>
 #else
-#include <unistd.h>
+   #include <unistd.h>
 #endif
 
 #include "mfem.hpp"
@@ -82,3 +89,40 @@ void printInfo()
       MPI_Send (&host, sizeof(host), MPI_CHAR, 0, 1, MPI_COMM_WORLD);
    }
 }
+
+/// This class help monitor the convergence of the linear Krylov solve.
+class GeneralResidualMonitor : public IterativeSolverMonitor
+{
+private:
+   const std::string prefix;
+   int interval;
+   mutable real_t norm0;
+
+public:
+   /// Constructor
+   GeneralResidualMonitor(const std::string& prefix_,
+                          int print_iv)
+      : prefix(prefix_), interval(print_iv)
+   {
+      if (Mpi::Root()) { interval = -1; }
+   }
+
+   /// Print residual
+   virtual void MonitorResidual(int it,
+                                real_t norm,
+                                const Vector &r,
+                                bool final)
+   {
+      if (interval < 0) { return; }
+      if (it == 0) { norm0 = norm; }
+
+      if ( ( it%interval == 0) || final )
+      {
+         mfem::out<<prefix<<" iteration "<<std::setw(3)<<it
+                  <<std::setw(8)<<std::defaultfloat<<std::setprecision(3)
+                  <<": ||r|| = "<<norm
+                  <<std::setw(6)<<std::fixed<<std::setprecision(2)
+                  <<", ||r||/||r_0|| = "<<100*norm/norm0<<" %\n";
+      }
+   }
+};
