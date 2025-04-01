@@ -327,7 +327,7 @@ void NavStoForm::MultBlocked(const BlockVector &bx,
 // Get Gradient
 BlockOperator & NavStoForm::GetGradient(const Vector &x) const
 {
-   if (hasGrad) { return *pBlockGrad; }
+  // if (hasGrad) { return *pBlockGrad; }
 
    if (pBlockGrad == NULL)
    {
