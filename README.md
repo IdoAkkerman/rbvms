@@ -44,6 +44,11 @@ Install the required packages by running the following command in a terminal:
 sudo apt-get install cmake git build-essential openmpi-common libopenmpi-dev libmetis5 libmetis-dev
 ```
 
+The RBVMS code can be downloaded and installed using the following oneline command:
+```
+bash <(curl -sL https://github.com/IdoAkkerman/rbvms/raw/refs/heads/main/config/remote-install.sh)
+```
+
 The RBVMS code can be downloaded using the following command:
 
 ```
