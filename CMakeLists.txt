@@ -16,8 +16,6 @@ set(INSTALL_DIR ${PROJECT_BINARY_DIR})
 #----------------------------------------------------------------------------
 # IF MFEM_DIR is not given build a local version here
 #----------------------------------------------------------------------------
-message(STATUS "MFEM_DIR = " ${MFEM_DIR})
-
 if (NOT DEFINED MFEM_DIR)
    #----------------------------------------------------------------------------
    # Get git submodules
@@ -71,7 +69,7 @@ if (NOT DEFINED MFEM_DIR)
    #----------------------------------------------------------------------------
    set(mfem_DIR ${MFEM_DIR}/mfem)
 else()
-   message(STATUS "Use provided MFEM")
+   message(STATUS "Use provided MFEM_DIR")
    set(mfem_DIR ${MFEM_DIR}/mfem)
 endif()
 
@@ -81,10 +79,32 @@ endif()
 find_package(mfem NAMES MFEM)
 message(STATUS "Found mfem: in ${MFEM_DIR} (version ${MFEM_VERSION})")
 
-# Add mfem common
-message("MFEM_CXX_FLAGS = ${MFEM_CXX_FLAGS}")
-message("MFEM_INCLUDE_DIRS = ${MFEM_INCLUDE_DIRS}")
-message("MFEM_LIBRARIES = ${MFEM_LIBRARIES}")
+#-------------------------------------------------------------------------------
+# Define Function BuildInfo 
+#-------------------------------------------------------------------------------
+function(buildInfo)
+   get_filename_component(tmp1 ${MFEM_DIR} REALPATH)
+   get_filename_component(tmp2 ${PROJECT_BINARY_DIR}/.. REALPATH)
+
+   if (${tmp1} STREQUAL ${tmp2})
+      message(STATUS "Report RBVMS, MFEM and hypre in build info.")
+      add_custom_command(OUTPUT buildInfo.hpp
+                         PRE_BUILD
+                         COMMAND /bin/bash
+                                 "${PROJECT_SOURCE_DIR}/config/buildInfo.sh"
+                                 "${PROJECT_SOURCE_DIR}" "mfem" "hypre"
+                         COMMENT "Getting git info")
+   else()
+      message(STATUS "External MFEM and hypre libraries used.")
+      message(STATUS "Only report RBVMS in build info.")
+      add_custom_command(OUTPUT buildInfo.hpp
+                         PRE_BUILD
+                         COMMAND /bin/bash
+                                 "${PROJECT_SOURCE_DIR}/config/buildInfo.sh"
+                                 "${PROJECT_SOURCE_DIR}"
+                         COMMENT "Getting git info")
+   endif()
+endfunction()
 
 #-------------------------------------------------------------------------------
 # Add directories

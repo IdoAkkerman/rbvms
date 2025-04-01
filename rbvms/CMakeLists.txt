@@ -13,20 +13,20 @@ set(SOURCES
 
 set(HEADERS
     formulation.hpp
-    integrator.hpp)
+    integrator.hpp
+    buildInfo.hpp)
 
-message("${SOURCES}")
-message("${GENERIC_SOURCES}")
-message("${HEADERS}")
-message("${GENERIC_HEADERS}")
-
+#-------------------------------------------------------------------------------
+# Create info header
+#-------------------------------------------------------------------------------
+buildInfo()
 
 #-------------------------------------------------------------------------------
 # Build executable
 #-------------------------------------------------------------------------------
 add_executable(rbvms rbvms.cpp
-               ${SOURCES} ${GENERIC_SOURCES}
+               ${SOURCES}
                ${HEADERS} ${GENERIC_HEADERS})
 
-target_link_libraries(rbvms PRIVATE ${MFEM_LIBRARIES} ${CMAKE_DL_LIBS})
+target_link_libraries(rbvms PRIVATE ${MFEM_LIBRARIES} util ${CMAKE_DL_LIBS})
 install(TARGETS rbvms DESTINATION bin)
