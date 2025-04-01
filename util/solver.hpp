@@ -112,8 +112,6 @@ public:
    : prefix(prefix_), interval(-1)
    {
       if (Mpi::Root()) { interval = print_iv; }
-cout<<interval<<endl;
-
    }
 
    /// Print residual
