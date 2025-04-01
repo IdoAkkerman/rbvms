@@ -27,7 +27,8 @@ void Evolution::ImplicitSolve(const real_t dt,
    form.ResetGradient();
    form.SetTimeAndSolution(t, dt, u0);
    Vector zero;
-   dudt = 0.0;
+   // Initial guess id previous solution
+   // For debugging set guess to zero: --> dudt = 0.0;
    solver.Mult(zero, dudt);
    dudt_ = dudt;
    if (Mpi::Root())
@@ -37,7 +38,7 @@ void Evolution::ImplicitSolve(const real_t dt,
    }
 }
 
-//
+// Compute a norm for each component
 void NewtonSystemSolver::Norms(const Vector &r, Vector& lnorm) const
 {
    lnorm.SetSize(nvar);
@@ -49,7 +50,7 @@ void NewtonSystemSolver::Norms(const Vector &r, Vector& lnorm) const
    }
 }
 
-//
+// Newton solver with a convergence check on each component
 void NewtonSystemSolver::Mult(const Vector &b, Vector &x) const
 {
    MFEM_VERIFY(oper != NULL, "the Operator is not set (use SetOperator).");
@@ -181,7 +182,7 @@ void NewtonSystemSolver::Mult(const Vector &b, Vector &x) const
 }
 
 
-// Print residual
+// Print residual & relative residual
 void GeneralResidualMonitor::MonitorResidual(int it,
                                              real_t norm,
                                              const Vector &r,
