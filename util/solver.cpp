@@ -183,22 +183,22 @@ void NewtonSystemSolver::Mult(const Vector &b, Vector &x) const
 
 // Print residual
 void GeneralResidualMonitor::MonitorResidual(int it,
-                                real_t norm,
-                                const Vector &r,
-                                bool final)
-   {
-      if (interval < 0) { return; }
-      if (it == 0) { norm0 = norm; }
+                                             real_t norm,
+                                             const Vector &r,
+                                             bool final)
+{
+   if (interval < 0) { return; }
+   if (it == 0) { norm0 = norm; }
 
-      if ( ( it%interval == 0) || final )
-      {
-         mfem::out<<prefix<<" iteration "<<std::setw(3)<<it
-                  <<std::setw(8)<<std::defaultfloat<<std::setprecision(3)
-                  <<": ||r|| = "<<norm
-                  <<std::setw(6)<<std::fixed<<std::setprecision(2)
-                   <<", ||r||/||r_0|| = "<<100*norm/norm0<<" %\n";
-      }
+   if ( ( it%interval == 0) || final )
+   {
+      mfem::out<<prefix<<" iteration "<<std::setw(3)<<it
+               <<std::setw(8)<<std::defaultfloat<<std::setprecision(3)
+               <<": ||r|| = "<<norm
+               <<std::setw(6)<<std::fixed<<std::setprecision(2)
+               <<", ||r||/||r_0|| = "<<100*norm/norm0<<" %\n";
    }
+}
 
 // Set the diagonal and off-diagonal operators
 void JacobianPreconditioner::SetOperator(const Operator &op)

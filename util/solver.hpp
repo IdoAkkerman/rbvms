@@ -32,8 +32,8 @@ public:
    }
 
    virtual void SetTimeAndSolution(const real_t t,
-                           const real_t dt,
-                           const Vector &x0) {};
+                                   const real_t dt,
+                                   const Vector &x0) {};
 
    void ResetGradient()
    {
@@ -108,8 +108,8 @@ private:
 public:
    /// Constructor
    GeneralResidualMonitor( const std::string& prefix_,
-                          int print_iv)
-   : prefix(prefix_), interval(-1)
+                           int print_iv)
+      : prefix(prefix_), interval(-1)
    {
       if (Mpi::Root()) { interval = print_iv; }
    }
@@ -144,12 +144,12 @@ public:
 
    // Destructor
    virtual ~JacobianPreconditioner()
-{
-   for (int i = 0; i < prec.Size(); ++i)
    {
-      if (prec[i]) delete prec[i];
-   }
-};
+      for (int i = 0; i < prec.Size(); ++i)
+      {
+         if (prec[i]) { delete prec[i]; }
+      }
+   };
 };
 
 

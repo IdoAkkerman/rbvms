@@ -202,9 +202,9 @@ int main(int argc, char *argv[])
    {
       if (strong_bdr.Size()>0) {cout<<"Strong  = "; strong_bdr.Print();}
       if (weak_bdr.Size()>0) {cout<<"Weak    = "; weak_bdr.Print();}
-      if (outflow_bdr.Size()>0){ cout<<"Outflow = "; outflow_bdr.Print() ;}
-      if (suction_bdr.Size()>0){ cout<<"Suction = "; suction_bdr.Print() ;}
-      if (blowing_bdr.Size()>0){ cout<<"Blowing = "; blowing_bdr.Print() ;}
+      if (outflow_bdr.Size()>0) { cout<<"Outflow = "; outflow_bdr.Print() ;}
+      if (suction_bdr.Size()>0) { cout<<"Suction = "; suction_bdr.Print() ;}
+      if (blowing_bdr.Size()>0) { cout<<"Blowing = "; blowing_bdr.Print() ;}
       if (master_bdr.Size()>0) {cout<<"Periodic (master) = "; master_bdr.Print();}
       if (slave_bdr.Size()>0) {cout<<"Periodic (slave)  = "; slave_bdr.Print();}
    }
@@ -228,7 +228,7 @@ int main(int argc, char *argv[])
    for (int b = 0; b < bnd_flag.Size(); b++)
    {
       MFEM_VERIFY(bnd_flag[b],
-                 "Not all boundaries have a boundary condition set.");
+                  "Not all boundaries have a boundary condition set.");
    }
 
    // Select the time integrator
@@ -247,11 +247,11 @@ int main(int argc, char *argv[])
    fecs[1] = FECollection::NewH1(order, dim, pmesh.IsNURBS());
 
    Array<ParFiniteElementSpace *> spaces(2);
-   spaces[0] = new ParFiniteElementSpace(&pmesh, fecs[0], dim, 
+   spaces[0] = new ParFiniteElementSpace(&pmesh, fecs[0], dim,
                                          Ordering::byNODES  //, Ordering::byVDIM);
                                         );// ,master_bdr, slave_bdr);
    spaces[1] = new ParFiniteElementSpace(&pmesh, fecs[1], 1, Ordering::byNODES
-                                         );//  ,master_bdr, slave_bdr);
+                                        );//  ,master_bdr, slave_bdr);
 
    // Report the degree of freedoms used
    {

@@ -661,10 +661,10 @@ int main(int argc, char *argv[])
    dist_solver.SetInconsistentDC(Redist_kdc0);
    dist_solver.SetConsistentDC(Redist_kdc1);
 
-//   RBVMS::GeneralResidualMonitor dist_monitor(MPI_COMM_WORLD,
-//                                              " - Redistance",
-//                                              1);
-//   dist_solver.SetNonlinearMonitor(dist_monitor);
+   //   RBVMS::GeneralResidualMonitor dist_monitor(MPI_COMM_WORLD,
+   //                                              " - Redistance",
+   //                                              1);
+   //   dist_solver.SetNonlinearMonitor(dist_monitor);
    dist_solver.SetLinearRelTol(Redist_GMRES_RelTol);
    dist_solver.SetLinearMaxIter(Redist_GMRES_MaxIter);
    dist_solver.SetNonlinearRelTol(Redist_Newton_RelTol);
