@@ -1,4 +1,4 @@
-git https://github.com/IdoAkkerman/rbvms.git
+git clone git@github.com:IdoAkkerman/rbvms.git
 cd rbvms
 mkdir build
 cd build
