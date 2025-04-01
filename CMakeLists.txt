@@ -92,7 +92,7 @@ function(buildInfo)
                          PRE_BUILD
                          COMMAND /bin/bash
                                  "${PROJECT_SOURCE_DIR}/config/buildInfo.sh"
-                                 "${PROJECT_SOURCE_DIR}" "mfem" "hypre"
+                                 "${PROJECT_SOURCE_DIR}/util" "mfem" "hypre"
                          COMMENT "Getting git info")
    else()
       message(STATUS "External MFEM and hypre libraries used.")
@@ -101,7 +101,7 @@ function(buildInfo)
                          PRE_BUILD
                          COMMAND /bin/bash
                                  "${PROJECT_SOURCE_DIR}/config/buildInfo.sh"
-                                 "${PROJECT_SOURCE_DIR}"
+                                 "${PROJECT_SOURCE_DIR}/util"
                          COMMENT "Getting git info")
    endif()
 endfunction()
