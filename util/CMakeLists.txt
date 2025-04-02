@@ -15,19 +15,36 @@ set(SOURCES
 
 set(HEADERS
     coefficients.hpp
-    solver.hpp)
+    solver.hpp
+    buildInfo.hpp)
+
+#-------------------------------------------------------------------------------
+# Get buildInfo
+#-------------------------------------------------------------------------------
+get_filename_component(tmp1 ${MFEM_DIR} REALPATH)
+get_filename_component(tmp2 ${PROJECT_BINARY_DIR}/.. REALPATH)
+
+if (${tmp1} STREQUAL ${tmp2})
+   message(STATUS "Report RBVMS, MFEM and hypre in build info.")
+   add_custom_command(OUTPUT buildInfo.hpp
+                      PRE_BUILD
+                      COMMAND /bin/bash
+                              "${PROJECT_SOURCE_DIR}/config/buildInfo.sh"
+                              "${PROJECT_SOURCE_DIR}/util" "mfem" "hypre"
+                      COMMENT "Getting git info")
+else()
+   message(STATUS "External MFEM and hypre libraries used.")
+   message(STATUS "Only report RBVMS in build info.")
+   add_custom_command(OUTPUT buildInfo.hpp
+                      PRE_BUILD
+                      COMMAND /bin/bash
+                              "${PROJECT_SOURCE_DIR}/config/buildInfo.sh"
+                              "${PROJECT_SOURCE_DIR}/util"
+                      COMMENT "Getting git info")
+endif()
 
 #-------------------------------------------------------------------------------
 # Build library
 #-------------------------------------------------------------------------------
 add_library(util ${SOURCES} ${HEADERS})
-target_link_libraries(util PRIVATE ${MFEM_LIBRARIES} ${CMAKE_DL_LIBS})
-
-#-------------------------------------------------------------------------------
-# Convert headers
-#-------------------------------------------------------------------------------
-unset(tmp_names)
-foreach(name ${HEADERS})
-   list(APPEND tmp_names ${CMAKE_CURRENT_SOURCE_DIR}/${name})
-endforeach()
-set(GENERIC_HEADERS ${tmp_names} PARENT_SCOPE)
+target_link_libraries(util PRIVATE ${LIBRARIES} ${CMAKE_DL_LIBS})

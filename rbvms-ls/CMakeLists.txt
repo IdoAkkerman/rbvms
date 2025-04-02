@@ -15,20 +15,12 @@ set(SOURCES
 set(HEADERS
     formulation.hpp
     integrator.hpp
-    dist_solver.hpp
-    buildInfo.hpp)
-
-#-------------------------------------------------------------------------------
-# Create info header
-#-------------------------------------------------------------------------------
-buildInfo()
+    dist_solver.hpp)
 
 #-------------------------------------------------------------------------------
 # Build executable
 #-------------------------------------------------------------------------------
-add_executable(rbvms-ls rbvms-ls.cpp
-               ${SOURCES}
-               ${HEADERS} ${GENERIC_HEADERS})
-
-target_link_libraries(rbvms-ls PRIVATE ${MFEM_LIBRARIES} util ${CMAKE_DL_LIBS})
+include_directories(../util)
+add_executable(rbvms-ls rbvms-ls.cpp ${SOURCES} ${HEADERS})
+target_link_libraries(rbvms-ls PRIVATE ${LIBRARIES} util ${CMAKE_DL_LIBS})
 install(TARGETS rbvms-ls DESTINATION bin)

@@ -13,10 +13,37 @@ project("RBVMS Superbuild" LANGUAGES CXX C)
 
 set(INSTALL_DIR ${PROJECT_BINARY_DIR})
 
-#----------------------------------------------------------------------------
-# IF MFEM_DIR is not given build a local version here
-#----------------------------------------------------------------------------
-if (NOT DEFINED MFEM_DIR)
+#-------------------------------------------------------------------------------
+# Build executables when MFEM_DIR is given
+#-------------------------------------------------------------------------------
+if (DEFINED MFEM_DIR)
+   #----------------------------------------------------------------------------
+   # Check MFEM_DIR
+   #----------------------------------------------------------------------------
+   if(NOT IS_DIRECTORY ${MFEM_DIR})
+      message(FATAL_ERROR "MFEM_DIR is not a directory")
+   endif()
+
+   #----------------------------------------------------------------------------
+   # Add mfem
+   #----------------------------------------------------------------------------
+   message(STATUS "Use provided MFEM_DIR: ${MFEM_DIR} ")
+   set(mfem_DIR ${MFEM_DIR}/mfem)
+   find_package(mfem NAMES MFEM)
+   message(STATUS "Found mfem: in ${MFEM_DIR} (version ${MFEM_VERSION})")
+   set(LIBRARIES ${MFEM_LIBRARIES})
+
+   #----------------------------------------------------------------------------
+   # Add
+   #----------------------------------------------------------------------------
+   add_subdirectory(util)
+   add_subdirectory(rbvms)
+   add_subdirectory(rbvms-ls)
+
+#-------------------------------------------------------------------------------
+# If no MFEM_DIR is given --> build a local version here
+#-------------------------------------------------------------------------------
+else()
    #----------------------------------------------------------------------------
    # Get git submodules
    #----------------------------------------------------------------------------
@@ -45,7 +72,6 @@ if (NOT DEFINED MFEM_DIR)
                        CONFIGURE_COMMAND ${CMAKE_COMMAND}
                                          "${PROJECT_SOURCE_DIR}/hypre/src"
                                          "-DHYPRE_INSTALL_PREFIX=${INSTALL_DIR}"
-                                         "-DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}"
                        SOURCE_DIR ${PROJECT_SOURCE_DIR}/hypre
                        BINARY_DIR ${PROJECT_BINARY_DIR}/hypre)
 
@@ -65,51 +91,15 @@ if (NOT DEFINED MFEM_DIR)
                        BINARY_DIR ${PROJECT_BINARY_DIR}/mfem)
 
    #----------------------------------------------------------------------------
-   # Set mfem directory
+   # Build rbvms with local MFEM
    #----------------------------------------------------------------------------
-   set(mfem_DIR ${MFEM_DIR}/mfem)
-else()
-   message(STATUS "Use provided MFEM_DIR")
-   set(mfem_DIR ${MFEM_DIR}/mfem)
+   ExternalProject_Add(rbvms
+                       PREFIX ${INSTALL_DIR}
+                       DEPENDS mfem
+                       CMAKE_ARGS -DMFEM_DIR=${INSTALL_DIR}
+                                  -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}
+                                  -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+                                  -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
+                       SOURCE_DIR ${PROJECT_SOURCE_DIR}
+                       BINARY_DIR ${PROJECT_BINARY_DIR})
 endif()
-
-#-------------------------------------------------------------------------------
-# Add mfem
-#-------------------------------------------------------------------------------
-find_package(mfem NAMES MFEM)
-message(STATUS "Found mfem: in ${MFEM_DIR} (version ${MFEM_VERSION})")
-
-#-------------------------------------------------------------------------------
-# Define Function BuildInfo 
-#-------------------------------------------------------------------------------
-function(buildInfo)
-   get_filename_component(tmp1 ${MFEM_DIR} REALPATH)
-   get_filename_component(tmp2 ${PROJECT_BINARY_DIR}/.. REALPATH)
-
-   if (${tmp1} STREQUAL ${tmp2})
-      message(STATUS "Report RBVMS, MFEM and hypre in build info.")
-      add_custom_command(OUTPUT buildInfo.hpp
-                         PRE_BUILD
-                         COMMAND /bin/bash
-                                 "${PROJECT_SOURCE_DIR}/config/buildInfo.sh"
-                                 "${PROJECT_SOURCE_DIR}/util" "mfem" "hypre"
-                         COMMENT "Getting git info")
-   else()
-      message(STATUS "External MFEM and hypre libraries used.")
-      message(STATUS "Only report RBVMS in build info.")
-      add_custom_command(OUTPUT buildInfo.hpp
-                         PRE_BUILD
-                         COMMAND /bin/bash
-                                 "${PROJECT_SOURCE_DIR}/config/buildInfo.sh"
-                                 "${PROJECT_SOURCE_DIR}/util"
-                         COMMENT "Getting git info")
-   endif()
-endfunction()
-
-#-------------------------------------------------------------------------------
-# Add directories
-#-------------------------------------------------------------------------------
-add_subdirectory(util)
-add_subdirectory(rbvms)
-add_subdirectory(rbvms-ls)
-
