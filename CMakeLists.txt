@@ -39,6 +39,7 @@ if (DEFINED MFEM_DIR)
    add_subdirectory(util)
    add_subdirectory(rbvms)
    add_subdirectory(rbvms-ls)
+   add_subdirectory(rbvms-ls2)
 
 #-------------------------------------------------------------------------------
 # If no MFEM_DIR is given --> build a local version here
