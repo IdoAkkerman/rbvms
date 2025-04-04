@@ -148,17 +148,9 @@ void NavStoLSForm::Mult(const Vector &dx, Vector &y) const
          dxs_true.GetBlock(s), dxs.GetBlock(s));
    }
 
-
    add(xs0,dt,dxs.GetBlock(0),xs.GetBlock(0));   // x = x0 + dt*dx
-
- //  fes[1]->GetProlongationMatrix()->Mult(
-  //    dxs_true.GetBlock(1), xs.GetBlock(1));
    xs.GetBlock(1) = dxs.GetBlock(1);
    add(xs2,dt,dxs.GetBlock(2),xs.GetBlock(2));   // x = x0 + dt*dx
-
-  // fes[3]->GetProlongationMatrix()->Mult(
-  //    dxs_true.GetBlock(3), xs.GetBlock(3));
-  // xs.GetBlock(3) = dxs.GetBlock(3);
    add(xs2,dt,dxs.GetBlock(3),xs.GetBlock(3));   // x = x0 + dt*dx
 
    // Actual assembly
@@ -473,6 +465,7 @@ BlockOperator & NavStoLSForm::GetGradient(const Vector &x) const
          pBlockGrad->SetBlock(s1, s2, phBlockGrad(s1,s2)->Ptr());
       }
    }
+
    hasGrad = true;
    return *pBlockGrad;
 }
@@ -486,21 +479,16 @@ const BlockOperator& NavStoLSForm
    xs.Update(block_offsets);
    dxs.Update(block_offsets);
 
-   fes[0]->GetProlongationMatrix()->Mult(
-      dxs_true.GetBlock(0), dxs.GetBlock(0));
+   for (int s=0; s<fes.Size(); ++s)
+   {
+      fes[s]->GetProlongationMatrix()->Mult(
+         dxs_true.GetBlock(s), dxs.GetBlock(s));
+   }
 
    add(xs0,dt,dxs.GetBlock(0),xs.GetBlock(0));   // x = x0 + dt*dx
-
-   fes[1]->GetProlongationMatrix()->Mult(
-      dxs_true.GetBlock(1), xs.GetBlock(1));
-
-   fes[2]->GetProlongationMatrix()->Mult(
-      dxs_true.GetBlock(2), dxs.GetBlock(2));
-
+   xs.GetBlock(1) = dxs.GetBlock(1);
    add(xs2,dt,dxs.GetBlock(2),xs.GetBlock(2));   // x = x0 + dt*dx
-
-   fes[3]->GetProlongationMatrix()->Mult(
-      dxs_true.GetBlock(3), xs.GetBlock(3));
+   add(xs2,dt,dxs.GetBlock(3),xs.GetBlock(3));   // x = x0 + dt*dx
 
    // (re)assemble Grad without b.c. into 'Grads'
    ComputeGradientBlocked(xs, dxs);

@@ -427,9 +427,6 @@ void IncNavStoIntegrator::AssembleElementVector(
       elvec[2]->Add(w*res_ls, sh_phi);            // Add Galerkin term
       elvec[2]->Add(w*res_ls*tau_ls, ushg_phi);   // Add SUPG term
 
-
-
-
       real_t h = Heaviside::h(grad_phi, Gij);
       real_t rphi = Heaviside::rphi(phi,h);
       real_t Se = Heaviside::sign(rphi);
@@ -442,7 +439,6 @@ void IncNavStoIntegrator::AssembleElementVector(
 
       // Strong residual
       real_t res_rd = a*grad_dist + k*dist - f;
-std::cout<<"res_rd = "<<res_rd<<std::endl;
       // Numerical parameters
       real_t tau_rd = GetRDTau(k, a, Gij);
       real_t kdc_rd = GetRDKdc(res_rd, grad_dist, Gij);
@@ -459,14 +455,7 @@ std::cout<<"res_rd = "<<res_rd<<std::endl;
       // Artificial diffusion
       shg_dist.Mult(grad_dist, test);
       elvec[3]->Add(w*kdc_rd, test);
-
-
    }
-
-std::cout<<"vec[0] = ";elvec[0]->Print();
-std::cout<<"vec[1] = ";elvec[1]->Print();
-std::cout<<"vec[2] = ";elvec[2]->Print();
-std::cout<<"vec[3] = ";elvec[3]->Print();
 
    elem_cfl = sqrt(elem_cfl);
 }
@@ -489,10 +478,17 @@ void IncNavStoIntegrator::AssembleElementGrad(
    elf_u.UseExternalData(elsol[0]->GetData(), dof_u, dim);
    elf_du.UseExternalData(elrate[0]->GetData(), dof_u, dim);
 
+   for (int j = 0; j < 4; j++)
+   {
+      for (int i = 0; i < 4; i++)
+      {
+         elmats(i,j)->SetSize(0,0);
+      }
+   }
+
    DenseMatrix &mat_wu = *elmats(0,0);
    DenseMatrix &mat_wp = *elmats(0,1);
    DenseMatrix &mat_wphi = *elmats(0,2);
-
 
    DenseMatrix &mat_qu = *elmats(1,0);
    DenseMatrix &mat_qp = *elmats(1,1);
@@ -501,7 +497,6 @@ void IncNavStoIntegrator::AssembleElementGrad(
    DenseMatrix &mat_vu = *elmats(2,0);
    DenseMatrix &mat_vp = *elmats(2,1);
    DenseMatrix &mat_vphi = *elmats(2,2);
-
 
    DenseMatrix &mat_dd = *elmats(3,3);
 
@@ -781,25 +776,6 @@ void IncNavStoIntegrator::AssembleElementGrad(
       AddMult_a_AAt(w*kdc_rd, shg_dist, mat_dd);
    }
 
-//mat_dd.PrintMatlab();
-
-   for (int ii = 0; ii < mat_dd.Height(); ii++)
-   {
-      for (int jj = 0; jj < mat_dd.NumCols(); jj++)
-      {
-         std::cout << mat_dd(ii,jj);
-         if (jj+1 == mat_dd.NumCols() || (jj+1) % mat_dd.NumCols() == 0)
-         {
-            std::cout << '\n';
-         }
-         else
-         {
-            std::cout << ' ';
-         }
-      }
-   } 
-
-
    // Adding sub elements
    int ii = 0;
    for (int i_dim = 0; i_dim < dim; ++i_dim)
@@ -824,7 +800,6 @@ void IncNavStoIntegrator::AssembleElementGrad(
 
       mat_vu.AddSubMatrix(0, i_dim * dof_u, mat_vu1[i_dim]);
    }
-
 }
 
 // Assemble the outflow boundary residual vectors
@@ -1445,6 +1420,14 @@ void IncNavStoIntegrator
    int dof_dist = el1[3]->GetDof();
 
    elf_u.UseExternalData(elsol[0]->GetData(), dof_u, dim);
+
+   for (int j = 0; j < 4; j++)
+   {
+      for (int i = 0; i < 4; i++)
+      {
+         elmats(i,j)->SetSize(0,0);
+      }
+   }
 
    DenseMatrix &mat_wu = *elmats(0,0);
    DenseMatrix &mat_wp = *elmats(0,1);
