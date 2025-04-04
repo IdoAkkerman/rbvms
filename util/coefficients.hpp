@@ -22,6 +22,7 @@ protected:
    void *libHandle;
    Vector x;
    real_t val;
+   bool print;
 
    /** Get a @a funNames C-function from the @a libName library
         - @a libName path+name of the library to use.
@@ -44,6 +45,7 @@ public:
    LibCoefficient(string libName, string funName,
                   bool required = true, real_t val = 0.0): val(val)
    {
+      print = Mpi::Root();
       GetLibFunction(libName, vector<string>({funName}), required);
    }
 
@@ -58,6 +60,7 @@ public:
    LibCoefficient(string libName, vector<string> funNames,
                   bool required = true, real_t val = 0.0): val(val)
    {
+      print = Mpi::Root();
       GetLibFunction(libName, funNames, required);
    }
 
@@ -76,6 +79,7 @@ protected:
    TDFunPtr TDFunction;
    void *libHandle;
    Vector x;
+   bool print;
 
    /** Get a @a funNames C-function from the @a libName library
         - @a libName path+name of the library to use.
@@ -98,6 +102,7 @@ public:
    LibVectorCoefficient(int vdim, string libName, string funName,
                         bool required = true) : VectorCoefficient(vdim)
    {
+      print = Mpi::Root();
       GetLibFunction(libName, vector<string>({funName}), required);
    }
 
@@ -112,6 +117,7 @@ public:
    LibVectorCoefficient(int vdim, string libName, vector<string> funNames,
                         bool required = true) : VectorCoefficient(vdim)
    {
+      print = Mpi::Root();
       GetLibFunction(libName, funNames, required);
    }
 

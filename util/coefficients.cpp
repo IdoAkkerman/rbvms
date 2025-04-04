@@ -18,45 +18,43 @@ void LibCoefficient::GetLibFunction(string libName,
 {
    // Open library
    libHandle = dlopen (libName.c_str(), RTLD_LAZY);
-   if (!libHandle)
+
+   // Search function
+   TDFunction = nullptr;
+   if (libHandle)
    {
-      cout<<"Library "<<libName<<" not found."<<endl;
-      if (required)
-      {
-         mfem_error("Can not obtain required function.\n");
-      }
-      cout <<"Functions:";
       for (int i = 0; i < funNames.size(); i++)
       {
-         cout<<" "<<funNames[i];
+         TDFunction = (TDFunPtr)dlsym(libHandle, funNames[i].c_str());
+         if (TDFunction) { break; }
       }
-      cout<<" will be set to val = "<<val<< endl;
-      return;
-   }
-
-   // Search Function
-   TDFunction = nullptr;
-   for (int i = 0; i < funNames.size(); i++)
-   {
-      TDFunction = (TDFunPtr)dlsym(libHandle, funNames[i].c_str());
-      if (TDFunction) { break; }
    }
 
    // Check if function is found
    if (!TDFunction)
    {
-      cout <<"Functions:";
-      for (int i = 0; i < funNames.size(); i++)
+      if (print)
       {
-         cout<<" "<<funNames[i];
+         if (funNames.size() == 1)
+         {
+            mfem::out <<"Function "<<funNames[0];
+         }
+         else
+         {
+            mfem::out <<"Functions: "<<funNames[0];
+            for (int i = 1; i < funNames.size(); i++)
+            {
+               mfem::out<<", "<<funNames[i];
+            }
+         }
+         mfem::out<<" can not be found in "<<libName;
       }
-      cout<<" can not be found in "<<libName<<endl;
 
       if (required)
       {
          mfem_error("Can not obtain required function.\n");
       }
-      cout<<"Function will be set to val = "<<val<< endl;
+      if (print) { mfem::out<<"\t --> Use default = "<<val<< endl; }
    }
 }
 
@@ -86,45 +84,43 @@ void LibVectorCoefficient::GetLibFunction(string libName,
 {
    // Open library
    libHandle = dlopen (libName.c_str(), RTLD_LAZY);
-   if (!libHandle)
+
+   // Search function
+   TDFunction = nullptr;
+   if (libHandle)
    {
-      cout<<"Library "<<libName<<" not found."<<endl;
-      if (required)
-      {
-         mfem_error("Can not obtain required function.\n");
-      }
-      cout <<"Functions:";
       for (int i = 0; i < funNames.size(); i++)
       {
-         cout<<" "<<funNames[i];
+         TDFunction = (TDFunPtr)dlsym(libHandle, funNames[i].c_str());
+         if (TDFunction) { break; }
       }
-      cout<<" will be set to homogenous."<<endl;
-      return;
-   }
-
-   // Search Function
-   TDFunction = nullptr;
-   for (int i = 0; i < funNames.size(); i++)
-   {
-      TDFunction = (TDFunPtr)dlsym(libHandle, funNames[i].c_str());
-      if (TDFunction) { break; }
    }
 
    // Check if function is found
    if (!TDFunction)
    {
-      cout <<"Functions:";
-      for (int i = 0; i < funNames.size(); i++)
+      if (print)
       {
-         cout<<" "<<funNames[i];
+         if (funNames.size() == 1)
+         {
+            mfem::out <<"Function "<<funNames[0];
+         }
+         else
+         {
+            mfem::out <<"Functions: "<<funNames[0];
+            for (int i = 1; i < funNames.size(); i++)
+            {
+               mfem::out<<", "<<funNames[i];
+            }
+         }
+         mfem::out<<" can not be found in "<<libName<<endl;
       }
-      cout<<" can not be found in "<<libName<<endl;
 
       if (required)
       {
          mfem_error("Can not obtain required function.\n");
       }
-      cout<<"Function will be set to homogenous."<<endl;
+      if (print) { mfem::out<<"\t --> Use homogenous vector."<<endl; }
    }
 }
 
