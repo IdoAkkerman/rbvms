@@ -81,7 +81,8 @@ void IncNavStoIntegrator::GetTau(real_t &tau_m, real_t &tau_c, real_t &cfl2,
       }
    }
    cfl2 = tau_c/tau_m;
-   tau_m += tau_c*rho*rho;
+   tau_m += tau_c;
+   tau_m *= rho*rho;
 
    // Diffusive part
    real_t tmp = Cd*Cd*mu*mu;
@@ -189,7 +190,7 @@ void IncNavStoIntegrator::GetTauB(real_t &tau_b, real_t &tau_n,
 
    Tr.Elem1->InverseJacobian().Mult(nor,hn);
    tau_b = Cb*mu*hn.Norml2();
-   tau_n = 0.0;
+   tau_n = 100.0;
 }
 
 // Get energy

@@ -51,7 +51,7 @@ public:
    /// Constructor
    NavStoForm(Array<ParFiniteElementSpace *> &pfes,
               RBVMS::IncNavStoIntegrator &integ)
-      : ParTimeDepBlockNonlinForm(pfes), integrator(integ) {};
+      : ParTimeDepBlockNonlinForm(pfes), integrator(integ), hasGrad(false) {};
 
    void SetStrongBC (Array<int> strong_bdr);
    void SetWeakBC   (Array<int> weak_bdr);

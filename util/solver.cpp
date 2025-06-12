@@ -28,7 +28,7 @@ void Evolution::ImplicitSolve(const real_t dt,
    form.SetTimeAndSolution(t, dt, u0);
    Vector zero;
    // Initial guess id previous solution
-   // For debugging set guess to zero: --> dudt = 0.0;
+   dudt = 0.0;
    solver.Mult(zero, dudt);
    dudt_ = dudt;
    if (Mpi::Root())
