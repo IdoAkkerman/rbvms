@@ -369,11 +369,6 @@ int main(int argc, char *argv[])
    vdc.RegisterField("u", &x_u);
    vdc.RegisterField("p", &x_p);
 
-   // Define the restart output
-   VisItDataCollection rdc("step", &pmesh);
-   rdc.SetPrefixPath("restart");
-   rdc.SetPrecision(18);
-
    // Get the start vector(s) from file -- or from function
    real_t t;
    int si, ri, vi;
@@ -399,6 +394,9 @@ int main(int argc, char *argv[])
       MPI_Bcast(&vi, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
       // Open data files
+      VisItDataCollection rdc("step", &pmesh);
+      rdc.SetPrefixPath("restart");
+      rdc.SetPrecision(18);
       rdc.Load(ri-1);
 
       x_u = *rdc.GetField("u");
@@ -407,7 +405,7 @@ int main(int argc, char *argv[])
       x_u.GetTrueDofs(xp.GetBlock(0));
       x_p.GetTrueDofs(xp.GetBlock(1));
 
-      if (nstate == 1)
+      if (nstate == 1 && rdc.GetField("du") && rdc.GetField("dp"))
       {
          *dx_u[0] = *rdc.GetField("du");
          *dx_p[0] = *rdc.GetField("dp");
@@ -434,15 +432,21 @@ int main(int argc, char *argv[])
       vdc.SetCycle(0);
       vdc.SetTime(0.0);
       vdc.Save();
+   }
 
-      // Define the restart writer
-      rdc.RegisterField("u", &x_u);
-      rdc.RegisterField("p", &x_p);
-      if (nstate == 1)
-      {
-         rdc.RegisterField("du", dx_u[0]);
-         rdc.RegisterField("dp", dx_p[0]);
-      }
+
+   // Define the restart output
+   VisItDataCollection rdc("step", &pmesh);
+   rdc.SetPrefixPath("restart");
+   rdc.SetPrecision(18);
+
+   // Define the restart writer
+   rdc.RegisterField("u", &x_u);
+   rdc.RegisterField("p", &x_p);
+   if (nstate == 1)
+   {
+       rdc.RegisterField("du", dx_u[0]);
+       rdc.RegisterField("dp", dx_p[0]);
    }
 
    // 7. Actual time integration
