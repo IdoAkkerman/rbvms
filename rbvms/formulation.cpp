@@ -504,7 +504,7 @@ void NavStoForm
             if (doftrans[j] || doftrans[l])
             {
                MFEM_WARNING("NavStoForm::Doftrans");
-               TransformDual(doftrans[j], doftrans[l], *elmats(j,l));
+               TransformDual(*doftrans[j], *doftrans[l], *elmats(j,l));
             }
             Grads(j,l)->AddSubMatrix(*vdofs[j], *vdofs[l],
                                      *elmats(j,l), skip_zeros);
@@ -563,7 +563,7 @@ void NavStoForm
                if (doftrans[j] || doftrans[l])
                {
                   MFEM_WARNING("NavStoForm::Doftrans");
-                  TransformDual(doftrans[j], doftrans[l], *elmats(j,l));
+                  TransformDual(*doftrans[j], *doftrans[l], *elmats(j,l));
                }
                Grads(j,l)->AddSubMatrix(*vdofs[j], *vdofs[l],
                                         *elmats(j,l), skip_zeros);
@@ -620,7 +620,7 @@ void NavStoForm
                if (doftrans[j] || doftrans[l])
                {
                   MFEM_WARNING("NavStoForm::Doftrans");
-                  TransformDual(doftrans[j], doftrans[l], *elmats(j,l));
+                  TransformDual(*doftrans[j], *doftrans[l], *elmats(j,l));
                }
                Grads(j,l)->AddSubMatrix(*vdofs[j], *vdofs[l],
                                         *elmats(j,l), skip_zeros);

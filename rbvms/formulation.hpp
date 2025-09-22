@@ -78,7 +78,7 @@ public:
    //real_t GetEnergyBlocked(const BlockVector &bx) const;
 
    /// Block T-Vector to Block T-Vector
-   void Mult(const Vector &x, Vector &y) const;
+   void Mult(const Vector &x, Vector &y) const override;
 
    /// Specialized version of Mult() for BlockVectors
    /// Block L-Vector to Block L-Vector
@@ -86,7 +86,7 @@ public:
                     const BlockVector &dbx,
                     BlockVector &by) const;
 
-   virtual BlockOperator &GetGradient(const Vector &x) const;
+   virtual BlockOperator &GetGradient(const Vector &x) const override;
 
    /// Return the local block gradient matrix for the given true-dof vector x
    const BlockOperator& GetLocalGradient(const Vector &x) const;

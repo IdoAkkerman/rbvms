@@ -4,7 +4,7 @@
 //   _____  ______      ____  __  _____
 //   |  __ \|  _ \ \    / /  \/  |/ ____|
 //   | |__) | |_) \ \  / /| \  / | (___
-//   |  _  /|  _ < \ \/ / | |\/| |\___ \ 
+//   |  _  /|  _ < \ \/ / | |\/| |\___ \
 //   | | \ \| |_) | \  /  | |  | |____) |
 //   |_|  \_\____/   \/   |_|  |_|_____/
 //
@@ -233,7 +233,8 @@ int main(int argc, char *argv[])
 
    // Select the time integrator
    unique_ptr<ODESolver> ode_solver = ODESolver::Select(ode_solver_type);
-   int nstate = ode_solver->GetState() ? ode_solver->GetState()->MaxSize() : 0;
+   ODESolverWithStates*  ode_solver_ws = dynamic_cast<ODESolverWithStates*>(ode_solver.get());
+   int nstate = ode_solver->GetStateSize();
 
    if (nstate > 1 && ( restart || restart_interval > 0 ))
    {
@@ -243,8 +244,16 @@ int main(int argc, char *argv[])
 
    // 4. Define a finite element space on the mesh.
    Array<FiniteElementCollection *> fecs(2);
-   fecs[0] = FECollection::NewH1(order, dim, pmesh.IsNURBS());
-   fecs[1] = FECollection::NewH1(order, dim, pmesh.IsNURBS());
+   if (pmesh.NURBSext)
+   {
+      fecs[0] = new NURBSFECollection(order);
+      fecs[1] = new NURBSFECollection(order);
+   }
+   else
+   {
+      fecs[0] = new H1_FECollection(order, dim);
+      fecs[1] = new H1_FECollection(order, dim);
+   }
 
    Array<ParFiniteElementSpace *> spaces(2);
    spaces[0] = new ParFiniteElementSpace(&pmesh, fecs[0], dim,
@@ -413,7 +422,7 @@ int main(int argc, char *argv[])
          dx_u[0]->GetTrueDofs(dxp.GetBlock(0));
          dx_p[0]->GetTrueDofs(dxp.GetBlock(1));
 
-         ode_solver->GetState()->Append(dxp);
+         ode_solver_ws->GetState().Append(dxp);
       }
    }
    else
@@ -621,7 +630,7 @@ int main(int argc, char *argv[])
 
          if (nstate == 1)
          {
-            ode_solver->GetState()->Get(0,dxp);
+            ode_solver_ws->GetState().Get(0,dxp);
             dx_u[0]->Distribute(dxp.GetBlock(0));
             dx_p[0]->Distribute(dxp.GetBlock(1));
          }
