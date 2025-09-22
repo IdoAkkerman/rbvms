@@ -27,7 +27,6 @@ get_filename_component(tmp2 ${PROJECT_BINARY_DIR}/.. REALPATH)
 if (${tmp1} STREQUAL ${tmp2})
    message(STATUS "Report RBVMS, MFEM and hypre in build info.")
    add_custom_command(OUTPUT buildInfo.hpp
-                      PRE_BUILD
                       COMMAND /bin/bash
                               "${PROJECT_SOURCE_DIR}/config/buildInfo.sh"
                               "${PROJECT_SOURCE_DIR}/util" "mfem" "hypre"
@@ -36,7 +35,6 @@ else()
    message(STATUS "External MFEM and hypre libraries used.")
    message(STATUS "Only report RBVMS in build info.")
    add_custom_command(OUTPUT buildInfo.hpp
-                      PRE_BUILD
                       COMMAND /bin/bash
                               "${PROJECT_SOURCE_DIR}/config/buildInfo.sh"
                               "${PROJECT_SOURCE_DIR}/util"

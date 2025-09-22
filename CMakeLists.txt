@@ -7,11 +7,14 @@
 # terms of the BSD-3 license. We welcome feedback and contributions, see file
 # CONTRIBUTING.md for details.
 #-------------------------------------------------------------------------------
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.8...4.99)
 include(ExternalProject)
 project("RBVMS Superbuild" LANGUAGES CXX C)
 
 set(INSTALL_DIR ${PROJECT_BINARY_DIR})
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 #-------------------------------------------------------------------------------
 # Build executables when MFEM_DIR is given
@@ -28,10 +31,24 @@ if (DEFINED MFEM_DIR)
    # Add mfem
    #----------------------------------------------------------------------------
    message(STATUS "Use provided MFEM_DIR: ${MFEM_DIR} ")
-   set(mfem_DIR ${MFEM_DIR}/mfem)
+   set(mfem_DIR ${MFEM_DIR}/lib/cmake/mfem)
    find_package(mfem NAMES MFEM)
-   message(STATUS "Found mfem: in ${MFEM_DIR} (version ${MFEM_VERSION})")
+   if (NOT DEFINED MFEM_VERSION)
+      set(mfem_DIR ${MFEM_DIR})
+      find_package(mfem NAMES MFEM)
+   endif()
+   if (NOT DEFINED MFEM_VERSION)
+      message( FATAL_ERROR "Could not find FEMConfig.cmake in ${MFEM_DIR} or ${MFEM_DIR}/lib/cmake/mfem" )
+   endif()
+   message(STATUS "Found mfem in ${mfem_DIR} (version ${MFEM_VERSION})")
+
+   # Include paths and libraries needed by MFEM
+   if (NOT CMAKE_CXX_COMPILER AND MFEM_CXX_COMPILER)
+     set(CMAKE_CXX_COMPILER "${MFEM_CXX_COMPILER}")
+   endif()
+   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MFEM_CXX_FLAGS}")
    set(LIBRARIES ${MFEM_LIBRARIES})
+   set(INCLUDE_DIRS "${MFEM_INCLUDE_DIRS}")
 
    #----------------------------------------------------------------------------
    # Add
