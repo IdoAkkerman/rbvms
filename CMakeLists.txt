@@ -106,6 +106,17 @@ if (DEFINED MFEM_DIR)
    endif()
 
    #----------------------------------------------------------------------------
+   # Load PRECICE
+   #----------------------------------------------------------------------------
+   if (DEFINED PRECICE_DIR)
+      find_package(precice REQUIRED
+                   HINTS "${PRECICE_DIR}" "${PRECICE_DIR}/lib/cmake/precice")
+      list(APPEND ${LIBRARIES} "precice::precice")
+      message(STATUS "Found precice config in: ${precice_DIR} (version ${precice_VERSION})")
+      add_compile_definitions(WITH_PRECICE)
+   endif()
+
+   #----------------------------------------------------------------------------
    # Add directories
    #----------------------------------------------------------------------------
    add_subdirectory(util)

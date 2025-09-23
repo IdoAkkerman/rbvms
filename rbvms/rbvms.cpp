@@ -48,6 +48,9 @@ void CheckBoundaries(Array<bool> &bnd_flags,
 
 int main(int argc, char *argv[])
 {
+#ifdef WITH_PRECICE
+std::cout<<"<<std::endl;
+#endif
    // 1. Initialize MPI and HYPRE and print info
    Mpi::Init(argc, argv);
    int num_procs = Mpi::WorldSize();
@@ -217,6 +220,7 @@ int main(int argc, char *argv[])
    }
    CheckBoundaries(bnd_flag, strong_bdr);
    CheckBoundaries(bnd_flag, weak_bdr);
+   //   CheckBoundaries(bnd_flag, fsi_bdr);
    CheckBoundaries(bnd_flag, outflow_bdr);
    CheckBoundaries(bnd_flag, suction_bdr);
    CheckBoundaries(bnd_flag, blowing_bdr);
@@ -294,6 +298,10 @@ int main(int argc, char *argv[])
    bOffsets[1] = spaces[0]->TrueVSize();
    bOffsets[2] = spaces[1]->TrueVSize();
    bOffsets.PartialSum();
+
+
+   //spaces[0].GetEssentailTrueDofs
+   //spaces[1].GetEssentailTrueDofs
 
    // 5. Define the time stepping algorithm
 
@@ -486,6 +494,11 @@ int main(int argc, char *argv[])
       }
       os<<endl;
    }
+
+   //vector.GetSubVector
+   //vector.SetSubVector
+
+
 
    // Loop till final time reached
    while (t < t_final)
