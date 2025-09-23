@@ -51,8 +51,6 @@ if (DEFINED MFEM_DIR)
    # Load CUDA
    #----------------------------------------------------------------------------
    if (MFEM_USE_CUDA)
-      enable_language(CUDA)
-
       # Check for conflicts
       if (MFEM_USE_HIP)
          message(FATAL_ERROR " *** MFEM_USE_HIP cannot be combined with MFEM_USE_CUDA.")
@@ -75,6 +73,7 @@ if (DEFINED MFEM_DIR)
          set(CUDA_ARCH "CMAKE_CUDA_ARCHITECTURES: ${CMAKE_CUDA_ARCHITECTURES}")
       endif()
       message(STATUS "Using CUDA architecture: ${CUDA_ARCH}")
+      enable_language(CUDA)
 
       # Set CMAKE variables
       if (CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA")
