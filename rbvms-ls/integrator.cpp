@@ -168,7 +168,7 @@ void IncNavStoIntegrator::AssembleElementEnergy(
    int dof_phi = el[2]->GetDof();
 
    int spaceDim = Tr.GetSpaceDim();
-   bool hess = false;//(el[0]->GetDerivType() == (int) FiniteElement::HESS);
+   //bool hess = false;//(el[0]->GetDerivType() == (int) FiniteElement::HESS);
    if (dim != spaceDim)
    {
       mfem_error("IncNavStoIntegrator::AssembleElementVector"
@@ -192,7 +192,7 @@ void IncNavStoIntegrator::AssembleElementEnergy(
 
    int intorder = 2*el[0]->GetOrder();
    const IntegrationRule &ir = IntRules.Get(el[0]->GetGeomType(), intorder);
-   real_t tau_m, tau_c, tau_ls, cfl2;
+   //real_t tau_m, tau_c, tau_ls, cfl2;
 
    for (int i = 0; i < ir.GetNPoints(); ++i)
    {
@@ -898,7 +898,7 @@ void IncNavStoIntegrator
 
    int intorder = 2*el1[0]->GetOrder();
    const IntegrationRule &ir = IntRules.Get(Tr.GetGeometryType(), intorder);
-   real_t tau_b, tau_n, mu, w, phi,dphidt,rho, un;
+   real_t tau_b, tau_n, mu, w, phi,rho, un;
    for (int i = 0; i < ir.GetNPoints(); i++)
    {
       const IntegrationPoint &ip = ir.IntPoint(i);
@@ -941,7 +941,7 @@ void IncNavStoIntegrator
 
       el1[2]->CalcPhysShape(*Tr.Elem1, sh_phi);
       phi = sh_phi*(*elsol[2]);
-      dphidt = sh_phi*(*elrate[2]);
+      //dphidt = sh_phi*(*elrate[2]);
 
       el1[2]->CalcPhysDShape(*Tr.Elem1, shg_phi);
       shg_phi.MultTranspose(*elsol[2], grad_phi);
@@ -1042,7 +1042,7 @@ void IncNavStoIntegrator
 
    int intorder = 2*el1[0]->GetOrder();
    const IntegrationRule &ir = IntRules.Get(Tr.GetGeometryType(), intorder);
-   real_t tau_b, tau_n, mu, w, phi,dphidt,rho;
+   real_t tau_b, tau_n, mu, w, phi,rho;
    for (int i = 0; i < ir.GetNPoints(); i++)
    {
       const IntegrationPoint &ip = ir.IntPoint(i);
@@ -1067,7 +1067,7 @@ void IncNavStoIntegrator
 
       el1[2]->CalcPhysShape(*Tr.Elem1, sh_phi);
       phi = sh_phi*(*elsol[2]);
-      dphidt = sh_phi*(*elrate[2]);
+      //dphidt = sh_phi*(*elrate[2]);
 
       el1[2]->CalcPhysDShape(*Tr.Elem1, shg_phi);
       shg_phi.MultTranspose(*elsol[2], grad_phi);

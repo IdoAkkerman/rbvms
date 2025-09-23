@@ -84,7 +84,6 @@ Vector NavStoLSForm::GetEnergies(const Vector &x) const
 
    Array<const FiniteElement *> fe(fes.Size());
    ElementTransformation *T;
-   FaceElementTransformations *Tr;
    Array<DofTransformation *> doftrans(fes.Size()); doftrans = nullptr;
    Mesh *mesh = fes[0]->GetMesh();
 

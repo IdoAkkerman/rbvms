@@ -61,9 +61,12 @@ public:
       GetLibFunction(libName, funNames, required);
    }
 
-   /// Evaluate
-   virtual real_t Eval(ElementTransformation &T,
-                       const IntegrationPoint &ip) override;
+   /// Evaluate 
+   using Coefficient::Eval;
+
+   real_t Eval(ElementTransformation &T,
+               const IntegrationPoint &ip) override;
+
    /// Destructor
    ~LibCoefficient();
 };
@@ -116,9 +119,11 @@ public:
    }
 
    /// Evaluate
-   virtual void Eval(Vector &V,
-                     ElementTransformation &T,
-                     const IntegrationPoint &ip) override;
+   using VectorCoefficient::Eval;
+   void Eval(Vector &V,
+             ElementTransformation &T,
+             const IntegrationPoint &ip) override;
+
    /// Destructor
    ~LibVectorCoefficient();
 };

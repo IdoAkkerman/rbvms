@@ -56,7 +56,7 @@ void NewtonSystemSolver::Mult(const Vector &b, Vector &x) const
    MFEM_VERIFY(oper != NULL, "the Operator is not set (use SetOperator).");
    MFEM_VERIFY(prec != NULL, "the Solver is not set (use SetSolver).");
 
-   int it;
+   int it = 0;
    Vector norm0(nvar), norm(nvar), norm_goal(nvar);
    const bool have_b = (b.Size() == Height());
 

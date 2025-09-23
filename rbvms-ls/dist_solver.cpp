@@ -182,8 +182,8 @@ real_t StabConvReactIntegrator::GetElementEnergy(const FiniteElement &el,
                                                  ElementTransformation &Trans,
                                                  const Vector &elfun)
 {
-   real_t w,k,tau,f,phi,phi0,res,kdc;
-   real_t h,rphi,Se,de;
+   real_t w,phi;
+   real_t h,rphi;
 
    SetDim(el.GetDim());
    int nd = el.GetDof();
