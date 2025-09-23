@@ -11,38 +11,35 @@ cmake_minimum_required(VERSION 3.8...4.99)
 include(ExternalProject)
 project("RBVMS Superbuild" LANGUAGES CXX C)
 
-set(INSTALL_DIR ${PROJECT_BINARY_DIR})
+# Prohibit in-source builds
+if ("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
+  message(FATAL_ERROR "In-source builds are prohibited.")
+endif ("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
 
+# Defaults
+set(INSTALL_DIR ${PROJECT_BINARY_DIR})
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+include("${CMAKE_CURRENT_SOURCE_DIR}/config/defaults.cmake")
 
 #-------------------------------------------------------------------------------
 # Build executables when MFEM_DIR is given
 #-------------------------------------------------------------------------------
 if (DEFINED MFEM_DIR)
-   #----------------------------------------------------------------------------
-   # Check MFEM_DIR
-   #----------------------------------------------------------------------------
-   if(NOT IS_DIRECTORY ${MFEM_DIR})
-      message(FATAL_ERROR "MFEM_DIR is not a directory")
-   endif()
 
    #----------------------------------------------------------------------------
-   # Add mfem
+   # Load mfem
    #----------------------------------------------------------------------------
-   message(STATUS "Use provided MFEM_DIR: ${MFEM_DIR} ")
-   set(mfem_DIR ${MFEM_DIR}/lib/cmake/mfem)
-   find_package(mfem NAMES MFEM)
-   if (NOT DEFINED MFEM_VERSION)
-      set(mfem_DIR ${MFEM_DIR})
-      find_package(mfem NAMES MFEM)
+   message(STATUS "Looking for mfem ...")
+   set(MFEM_DIR "" CACHE PATH "Path to the MFEM build or install prefix.")
+   if (MFEM_DIR)
+      find_package(mfem REQUIRED NAMES MFEM HINTS "${MFEM_DIR}"
+                  "${MFEM_DIR}/lib/cmake/mfem" NO_DEFAULT_PATH)
+   else()
+      find_package(mfem REQUIRED NAMES MFEM)
    endif()
-   if (NOT DEFINED MFEM_VERSION)
-      message( FATAL_ERROR "Could not find FEMConfig.cmake in ${MFEM_DIR} or ${MFEM_DIR}/lib/cmake/mfem" )
-   endif()
-   message(STATUS "Found mfem in ${mfem_DIR} (version ${MFEM_VERSION})")
-
-   # Include paths and libraries needed by MFEM
+   message(STATUS "Found mfem config in: ${mfem_DIR} (version ${MFEM_VERSION})")
+   message(STATUS "Mfem compiler is: ${MFEM_CXX_COMPILER}")
    if (NOT CMAKE_CXX_COMPILER AND MFEM_CXX_COMPILER)
      set(CMAKE_CXX_COMPILER "${MFEM_CXX_COMPILER}")
    endif()
@@ -51,7 +48,66 @@ if (DEFINED MFEM_DIR)
    set(INCLUDE_DIRS "${MFEM_INCLUDE_DIRS}")
 
    #----------------------------------------------------------------------------
-   # Add
+   # Load CUDA
+   #----------------------------------------------------------------------------
+   if (MFEM_USE_CUDA)
+      enable_language(CUDA)
+
+      # Check for conflicts
+      if (MFEM_USE_HIP)
+         message(FATAL_ERROR " *** MFEM_USE_HIP cannot be combined with MFEM_USE_CUDA.")
+      endif()
+
+      # Use ${CMAKE_CXX_COMPILER} as the cuda host compiler.
+      if (NOT CMAKE_CUDA_HOST_COMPILER)
+         set(CMAKE_CUDA_HOST_COMPILER ${CMAKE_CXX_COMPILER})
+      endif()
+
+      # Obtain target CUDA architecture
+      if (NOT CMAKE_CUDA_ARCHITECTURES)
+         string(REGEX REPLACE "^sm_" "" ARCH_NUMBER "${CUDA_ARCH}")
+         if ("${CUDA_ARCH}" STREQUAL "sm_${ARCH_NUMBER}")
+            set(CMAKE_CUDA_ARCHITECTURES "${ARCH_NUMBER}")
+         else()
+            message(FATAL_ERROR "Unknown CUDA_ARCH: ${CUDA_ARCH}")
+         endif()
+      else()
+         set(CUDA_ARCH "CMAKE_CUDA_ARCHITECTURES: ${CMAKE_CUDA_ARCHITECTURES}")
+      endif()
+      message(STATUS "Using CUDA architecture: ${CUDA_ARCH}")
+
+      # Set CMAKE variables
+      if (CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA")
+         set(MFEM_CUDA_COMPILER_IS_NVCC ON)
+         set(CUDA_FLAGS "${CUDA_FLAGS} --expt-extended-lambda --expt-relaxed-constexpr")
+      endif()
+      set(CMAKE_CUDA_STANDARD ${CMAKE_CXX_STANDARD} CACHE STRING
+         "CUDA standard to use.")
+      set(CMAKE_CUDA_STANDARD_REQUIRED ON CACHE BOOL
+         "Force the use of the chosen CUDA standard.")
+      set(CMAKE_CUDA_EXTENSIONS OFF CACHE BOOL "Enable CUDA standard extensions.")
+      set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${CUDA_FLAGS}")
+      find_package(CUDAToolkit REQUIRED)
+
+      # Set cusparse library
+      set(CUSPARSE_LIBRARIES ${CUDA_cusparse_LIBRARY})
+      if (NOT CUSPARSE_LIBRARIES)
+         message(FATAL_ERROR
+         "Error setting CUSPARSE_LIBRARIES: ${CUSPARSE_LIBRARIES}")
+      endif()
+      set(CUSPARSE_FOUND TRUE)
+
+      # Set cublas library
+      set(CUBLAS_LIBRARIES ${CUDA_cublas_LIBRARY})
+      if (NOT CUBLAS_LIBRARIES)
+         message(FATAL_ERROR
+         "Error setting CUBLAS_LIBRARIES: ${CUBLAS_LIBRARIES}")
+      endif() 
+      set(CUBLAS_FOUND TRUE)
+   endif()
+
+   #----------------------------------------------------------------------------
+   # Add directories
    #----------------------------------------------------------------------------
    add_subdirectory(util)
    add_subdirectory(rbvms)

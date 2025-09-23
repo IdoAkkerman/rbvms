@@ -44,5 +44,10 @@ endif()
 #-------------------------------------------------------------------------------
 # Build library
 #-------------------------------------------------------------------------------
+if (MFEM_USE_CUDA)
+   enable_language(CUDA)
+   set_source_files_properties(${SOURCES} PROPERTIES LANGUAGE CUDA)
+endif()
+
 add_library(util ${SOURCES} ${HEADERS})
 target_link_libraries(util PRIVATE ${LIBRARIES} ${CMAKE_DL_LIBS})
