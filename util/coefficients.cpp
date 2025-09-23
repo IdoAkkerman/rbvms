@@ -133,6 +133,7 @@ void LibVectorCoefficient::Eval(Vector &V,
                                 ElementTransformation &T,
                                 const IntegrationPoint &ip)
 {
+   V.SetSize(vdim);
    // Homegenous if not defined
    if (!TDFunction)
    {
