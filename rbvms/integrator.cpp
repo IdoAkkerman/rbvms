@@ -118,7 +118,7 @@ real_t IncNavStoIntegrator::GetElemArtDiff(const Array<const FiniteElement *>
    int dof_p = el[1]->GetDof();
 
    int spaceDim = Tr.GetSpaceDim();
-   bool hess = false;//(el[0]->GetDerivType() == (int) FiniteElement::HESS);
+   //bool hess = false;//(el[0]->GetDerivType() == (int) FiniteElement::HESS);
    if (dim != spaceDim)
    {
       mfem_error("IncNavStoIntegrator::AssembleElementVector"
@@ -427,7 +427,7 @@ void IncNavStoIntegrator::AssembleElementGrad(
    const IntegrationRule &ir = IntRules.Get(el[0]->GetGeomType(), intorder);
    real_t tau_m, tau_c, cfl2;
 
-   double mu_ad = 0.0;//GetElemArtDiff(el, Tr, elsol, elrate);
+   //double mu_ad = 0.0;//GetElemArtDiff(el, Tr, elsol, elrate);
 
    for (int i = 0; i < ir.GetNPoints(); ++i)
    {
@@ -437,7 +437,7 @@ void IncNavStoIntegrator::AssembleElementGrad(
 
       real_t rho = c_rho.Eval(Tr, ip);
       real_t mu = c_mu.Eval(Tr, ip);
-      real_t mu_eff = mu + mu_ad;
+      //real_t mu_eff = mu + mu_ad;
 
       el[0]->CalcPhysShape(Tr, sh_u);
       elf_u.MultTranspose(sh_u, u);
