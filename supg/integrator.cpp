@@ -22,14 +22,14 @@ const IntegrationRule &StabConvDifIntegrator::GetRule(
 // Define convective tau
 real_t StabConvDifIntegrator::GetTau(real_t &k, Vector &a, DenseMatrix &Gij)
 {
-   double CI = 1.0/12.0;
-   double tau = 0.0;
+   double CI = 1./12.0;
+   double tau = 1e-10;
    int dim = Gij.Width();
    for (int j = 0; j < dim; j++)
    {
       for (int i = 0; i < dim; i++)
       {
-         tau += Gij(i,j)*a[i]*a[j] + CI*k*k*Gij(i,j)*Gij(i,j);
+         tau += Gij(i,j)*a[i]*a[j] + CI*CI*k*k*Gij(i,j)*Gij(i,j);
       }
    }
    return 1.0/sqrt(tau);
@@ -42,7 +42,7 @@ real_t StabConvDifIntegrator::GetKdc(Vector &a,
                                        DenseMatrix &Gij)
 {
    real_t h = 1.0/sqrt(Gij.Trace()/Gij.Width());
-   return kdc0*h*a.Norml2() + kdc1*h*fabs(res)/dphidx.Norml2();
+   return kdc0*h*a.Norml2() + kdc1*h*fabs(res)/(dphidx.Norml2() + 1e-10);
 }
 
 // Set the dimension of temporary variables
@@ -63,7 +63,7 @@ void StabConvDifIntegrator::AssembleElementVector(const FiniteElement &el,
                                                     const Vector &elfun,
                                                     Vector &elvect)
 {
-   real_t w,mu,tau,f,phi,res,kdc;
+   real_t w,mu,f,phi,dphidx2,res,res_red;
 
    SetDim(el.GetDim());
    int nd = el.GetDof();
@@ -71,6 +71,7 @@ void StabConvDifIntegrator::AssembleElementVector(const FiniteElement &el,
    elvect.SetSize(nd);
    shape.SetSize(nd);
    dshape.SetSize(nd,dim);
+   lshape.SetSize(nd);
    test.SetSize(nd);
 
    const IntegrationRule *ir = NonlinearFormIntegrator::IntRule ?
@@ -88,38 +89,33 @@ void StabConvDifIntegrator::AssembleElementVector(const FiniteElement &el,
       el.CalcPhysShape(Trans, shape);
       phi = shape*elfun;
 
-      // Calculate shapes
       el.CalcPhysDShape(Trans, dshape);
       dshape.MultTranspose(elfun, dphidx);
+
+      el.CalcPhysLinLaplacian(Trans, lshape);
+      dphidx2 = lshape*elfun;
 
       // Force, reaction and convection parameter
       adv_cf->Eval(a, Trans, ip);
       mu = mu_cf->Eval(Trans, ip);
       f =  force_cf->Eval(Trans, ip);
 
-      // Strong residual
-      res = a*dphidx + mu*phi - f;
-      res = phi - f;
-     // res *= -1.0;
-      // Numerical parameters
-      tau = GetTau(mu, a, Gij);
-      kdc = GetKdc(a, res, dphidx, Gij);
+      // Galerkin terms
+      res = a*dphidx - f;
+      elvect.Add(w*res, shape);
 
-      // Compute test function
-      dshape.Mult(a, test);  // Add Convection stabilization term
-      test.Add(mu, shape);   // Add Reaction stabilization term
-      test *= tau;           // Scale Stabilization term with parameter
-      test *= 0.0;
-      test += shape;         // Galerkin term
-
-      // Weak residual
-      elvect.Add(w*res, test);
-
-      // Artificial diffusion
+      // Diffusion (Galerkin + artificial)
+      res = a*dphidx - mu*dphidx2 - f;
       dshape.Mult(dphidx, test);
-      //elvect.Add(w*kdc, test);
+      elvect.Add(w*(GetKdc(a, res, dphidx, Gij)+mu), test);
+
+      // Compute stabilized test function
+      dshape.Mult(a, test);             // Add Convection stabilization term
+      test.Add((int) type*mu, lshape);  // Add Reaction stabilization term
+
+      // Stabilized terms
+      elvect.Add(w*GetTau(mu, a, Gij)*res, test);
    }
- // elvect.Print(std::cout, 5555);
 }
 
 // Compute the element jacobian
@@ -128,7 +124,7 @@ void StabConvDifIntegrator::AssembleElementGrad(const FiniteElement &el,
                                                   const Vector &elfun,
                                                   DenseMatrix &elmat)
 {
-   real_t w,mu,tau,f,phi,res,kdc;
+   real_t w,mu,f,phi,dphidx2,res;
 
    SetDim(el.GetDim());
    int nd = el.GetDof();
@@ -136,6 +132,7 @@ void StabConvDifIntegrator::AssembleElementGrad(const FiniteElement &el,
    elmat.SetSize(nd);
    shape.SetSize(nd);
    dshape.SetSize(nd,dim);
+   lshape.SetSize(nd);
    trail.SetSize(nd);
    test.SetSize(nd);
 
@@ -154,35 +151,33 @@ void StabConvDifIntegrator::AssembleElementGrad(const FiniteElement &el,
       el.CalcPhysShape(Trans, shape);
       phi = shape*elfun;
 
-      // Calculate shapes
       el.CalcPhysDShape(Trans, dshape);
       dshape.MultTranspose(elfun, dphidx);
+
+      el.CalcPhysLinLaplacian(Trans, lshape);
+      dphidx2 = lshape*elfun;
 
       // Force, reaction and convection parameter
       adv_cf->Eval(a, Trans, ip);
       mu = mu_cf->Eval(Trans, ip);
       f =  force_cf->Eval(Trans, ip);
 
-      // Strong residual
-      res = a*dphidx + mu*phi - f;
+      // Convection Galerkin terms
+      dshape.Mult(a, trail);
+      AddMult_a_VWt(w, shape, trail, elmat);
 
-      // Numerical parameters
-      tau = GetTau(mu, a, Gij);
-      kdc = GetKdc(a, res, dphidx, Gij);
+      // Diffusion (Galerkin + artificial)
+      res = a*dphidx - mu*dphidx2 - f;
+      AddMult_a_AAt(w*(GetKdc(a, res, dphidx, Gij)+mu), dshape, elmat);
 
-      // Compute trail function
-      dshape.Mult(a, trail);  // Add Convection term
-      trail.Add(mu, shape);   // Add Reaction term
+      // Compute stabilized test functions
+      dshape.Mult(a, test);            // Add Convection term
+      test.Add((int) type*mu, lshape); // Add Diffusion term
 
-      // Compute test function
-      test.Set(tau, trail);   // Add Stabilization term
-      test += shape;          // Add Galerkin term
+      // Compute stabilized trail functions
+      dshape.Mult(a, trail);          // Add Convection term
+      trail.Add(-mu, lshape);         // Add Diffusion term
 
-      // Stablization term
-  //    AddMult_a_VWt(w, test, trail, elmat);
-      AddMult_a_VVt(w, shape, elmat);
-
-      // Artificial diffusion
-     // AddMult_a_AAt(w*kdc, dshape, elmat);
+      AddMult_a_VWt(w*GetTau(mu, a, Gij), test, trail, elmat);
    }
 }

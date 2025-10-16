@@ -16,6 +16,13 @@
 
 using namespace mfem;
 
+
+enum StabilizeType{
+   GLS = -1,
+   SUPG = 0,
+   VMS = 1
+};
+
 /** This Class defines an integrator for stabilized multi-dimensional
     convection-reaction equation.
 
@@ -30,22 +37,21 @@ private:
    Coefficient *mu_cf;
    Coefficient *force_cf;
 
-   /// Discontinuity capturing parameters
-   real_t kdc0;  // inconsistent part
-   real_t kdc1;  // consistent part
-
    /// The stabilization parameter
+   int dim;
    void SetDim(int dim);
 
    /// The stabilization parameter
+   StabilizeType type;
    real_t GetTau(real_t &k, Vector &a, DenseMatrix &Gij);
 
-   /// The disconituity capturing parameter
+   /// The discontinuity capturing parameter
+   real_t kdc0;  // inconsistent part
+   real_t kdc1;  // consistent part
    real_t GetKdc(Vector &a, real_t &res, Vector &dphidx, DenseMatrix &Gij);
 
    /// Temporary variables
-   int dim;
-   Vector a, dphidx, shape, trail, test;
+   Vector a, dphidx, shape, lshape, trail, test;
    DenseMatrix dshape, Gij;
 
 public:
@@ -53,13 +59,19 @@ public:
    StabConvDifIntegrator(VectorCoefficient &a,
                          Coefficient &m,
                          Coefficient &f,
-                         real_t k0 = 0.01,
-                         real_t k1 = 0.25) : adv_cf(&a), mu_cf(&m), force_cf(&f)
+                         real_t k0 = 0.0,
+                         real_t k1 = 0.0) : adv_cf(&a), mu_cf(&m), force_cf(&f)
    {
+      type = StabilizeType::SUPG;
       kdc0 = k0;
       kdc1 = k1;
       dim = -1;
    };
+
+   void SetStabilization(StabilizeType t){ type = t; };
+   void SetGLS(){ type = StabilizeType::GLS; };
+   void SetSUPG(){ type = StabilizeType::SUPG; };
+   void SetVMS(){ type = StabilizeType::VMS; };
 
    /// Destructor
    ~StabConvDifIntegrator() {};

@@ -100,12 +100,12 @@ int main(int argc, char *argv[])
                   "Sets the dynamic diffusion parameters, should be positive.");
 
    // Artificial diffusion parameters
-   real_t NavSto_kdc0 = 0.0;
-   real_t NavSto_kdc1 = 0.1;
+   real_t kdc0 = 0.0;
+   real_t kdc1 = 0.1;
 
-   args.AddOption(&NavSto_kdc0, "-nsk0", "--navsto-kdc0",
+   args.AddOption(&kdc0, "-k0", "--dc0",
                   "Inconsistent diffusion parameter of the NS formulation.");
-   args.AddOption(&NavSto_kdc1, "-nsk1", "--navsto-kdc1",
+   args.AddOption(&kdc1, "-k1", "--kdc1",
                   "Consistent diffusion parameter of tha NS formulation.");
 
    // Solver parameters
@@ -190,19 +190,18 @@ int main(int argc, char *argv[])
    // Define a finite element space on the mesh.
    FiniteElementCollection* fec = nullptr;
    NURBSExtension* ext = NULL;
-   if (pmesh.NURBSext)
+   if (pmesh.NURBSext && order > 1)
    {
       fec = new NURBSFECollection(order);
       ext = new NURBSExtension(pmesh.NURBSext,order);
    }
    else
    {
-      fec = new H1_FECollection(order, dim);
+      fec = new H1_FECollection(abs(order), dim);
    }
 
    ParFiniteElementSpace* space;
-   space = new ParFiniteElementSpace(&pmesh, ext, fec);//, 1,
-//                                     Ordering::byNODES);  //, Ordering::byVDIM);
+   space = new ParFiniteElementSpace(&pmesh, ext, fec);
 
    // Report the degree of freedoms used
    {
@@ -225,12 +224,10 @@ int main(int argc, char *argv[])
       }
    }
 
-   // Define the gridfunctions
+   // Define the gridfunction and solution vector
    ParGridFunction phi_gf(space);
    LibCoefficient sol_phi(lib_file, "sol_phi");
-   phi_gf = 0.0 ;//.ProjectCoefficient(sol_phi);
-
-   //
+   phi_gf.ProjectCoefficient(sol_phi);
    Vector xp;
    phi_gf.GetTrueDofs(xp);
 
@@ -260,27 +257,19 @@ int main(int argc, char *argv[])
    }
    ess_bdr.Print();
    form.SetEssentialBC(ess_bdr);
-
-   //form.SetInconsistentDC(NavSto_kdc0);
-   //form.SetConsistentDC(NavSto_kdc1);
-
-   //form.SetStrongBC (strong_bdr);
    //form.SetWeakBC   (weak_bdr);
-   //form.SetOutflowBC(outflow_bdr);
 
    Solver* pc_mom  = nullptr;
    HypreILU* ilu_mom = new HypreILU();
    pc_mom  = ilu_mom;
 
    // Set up the Jacobian solver
-   RBVMS::GeneralResidualMonitor j_monitor("\t\tFGMRES", 100);
    FGMRESSolver gmres(MPI_COMM_WORLD);
    gmres.iterative_mode = false;
    gmres.SetRelTol(GMRES_RelTol);
    gmres.SetMaxIter(GMRES_MaxIter);
    gmres.SetKDim(GMRES_MaxIter+1);
-   gmres.SetPrintLevel(-1);
-   gmres.SetMonitor(j_monitor);
+   gmres.SetPrintLevel(3);
    gmres.SetPreconditioner(*pc_mom);
 
    // Set up the Newton solver
@@ -292,14 +281,44 @@ int main(int argc, char *argv[])
    newton_solver.SetMaxIter(Newton_MaxIter);
    newton_solver.SetSolver(gmres);
 
+   // Solver nonlinear system
    Vector zero(space->TrueVSize());
    zero = 0.0;
    newton_solver.Mult(zero, xp);
-xp.Print();
-   //phi_gf.GetTrueDofs(xp);          
    phi_gf.Distribute(xp);
+
+   // Compute errors
+   LibVectorCoefficient sol_grad(dim, lib_file, "grad_phi", false);
+   if (sol_grad.Foundfunction())
+   {
+      int order_quad = max(2, 2*order+1);
+      const IntegrationRule *irs[Geometry::NumGeom];
+      for (int i=0; i < Geometry::NumGeom; ++i)
+      {
+         irs[i] = &(IntRules.Get(i, order_quad));
+      }
+
+      double err_phi  = phi_gf.ComputeL2Error(sol_phi, irs);
+      double norm_phi = ComputeGlobalLpNorm(2., sol_phi, pmesh, irs);
+      std::cout << "|| phi_h - phi_ex || / || phi_ex || = " << err_phi / norm_phi << "\n";
+
+      err_phi  = phi_gf.ComputeGradError(&sol_grad, irs);
+      norm_phi =  ComputeGlobalLpNorm(2., sol_grad, pmesh, irs);
+      std::cout << "||grad phi_h - grad phi_ex || / || grad phi_ex || = " << err_phi / norm_phi << "\n";
+   }
+
+   // Write solution
    vdc.SetCycle(1);
    vdc.Save();
+
+   {
+      char vishost[] = "localhost";
+      int visport = 19916;
+      socketstream sol_sock(vishost, visport);
+      sol_sock << "parallel " << num_procs << " " << myid << "\n";
+      sol_sock.precision(8);
+      sol_sock << "solution\n" << pmesh << phi_gf << flush;
+   }
 
    // Free the used memory.
    delete fec;
