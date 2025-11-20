@@ -13,6 +13,61 @@
 using namespace mfem;
 using namespace std;
 
+
+
+class InverseEstimateCoefficient : public Coefficient
+{
+private:
+   ///
+   Vector elemInvEst;
+   /// FE space on which the grid function lives. Owned if #fec is not NULL.
+   FiniteElementSpace *fes;
+
+   ///
+   const IntegrationRule *ir;
+
+   ///
+   Coefficient *Q;
+   Vector laplace, shape, ovec, evec;
+   DenseMatrix dshape, lapmat, bimat;
+
+   ///
+   void SetIntRule(const FiniteElement &el);
+
+   ///
+   void ComputeInverseEstimates();
+
+   real_t ElementInverseEstimate(const FiniteElement &el,
+                                 ElementTransformation &Trans);
+
+public:
+   ///
+   InverseEstimateCoefficient(FiniteElementSpace *f);
+   InverseEstimateCoefficient(FiniteElementSpace *f, Coefficient &q);
+
+   /// Caller gets owner ship of GridFunction and
+   GridFunction *GetGridFunction();
+
+   /// Reset the scalar factor
+   void SetDiffusion(Coefficient &q)
+   {
+      if (Q != &q)
+      {
+         Q = &q;
+         ComputeInverseEstimates();
+      }
+   }
+   /// Return the scalar factor
+   Coefficient * GetDiffusion() const { return Q; }
+
+   /// Evaluate the coefficient at @a ip.
+   virtual real_t Eval(ElementTransformation &T,
+                       const IntegrationPoint &ip)
+   { return elemInvEst[T.ElementNo]; }
+
+};
+
+
 /// Coefficient class with a function defined in a seperate C-function
 class LibCoefficient : public Coefficient
 {
