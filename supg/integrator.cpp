@@ -228,7 +228,16 @@ void StabConvDifIntegrator::AssembleElementVector(const FiniteElement &el,
       const IntegrationPoint &ip = ir->IntPoint(i);
       Trans.SetIntPoint (&ip);
       w = Trans.Weight() * ip.weight;
-      MultAtB(Trans.InverseJacobian(),Trans.InverseJacobian(),Gij);
+
+      // Metric tensor (with perfect geometry)
+      const mfem::DenseMatrix &A = Geometries.GetGeomToPerfGeomJac(Trans.GetGeometryType());
+      const mfem::DenseMatrix &invJ = Trans.InverseJacobian();
+      mfem::DenseMatrix invJ_perf(invJ.Height(), invJ.Width());
+      Mult(A, invJ, invJ_perf);
+      MultAtB(invJ_perf, invJ_perf, Gij);
+
+      // Old metric tensor derivation:
+      // MultAtB(Trans.InverseJacobian(), Trans.InverseJacobian(), Gij);
 
       // Calculate shapes
       el.CalcPhysShape(Trans, shape);
@@ -291,7 +300,16 @@ void StabConvDifIntegrator::AssembleElementGrad(const FiniteElement &el,
       const IntegrationPoint &ip = ir->IntPoint(i);
       Trans.SetIntPoint (&ip);
       w = Trans.Weight() * ip.weight;
-      MultAtB(Trans.InverseJacobian(),Trans.InverseJacobian(),Gij);
+
+      // Metric tensor (with perfect geometry)
+      const mfem::DenseMatrix &A = Geometries.GetGeomToPerfGeomJac(Trans.GetGeometryType());
+      const mfem::DenseMatrix &invJ = Trans.InverseJacobian();
+      mfem::DenseMatrix invJ_perf(invJ.Height(), invJ.Width());
+      Mult(A, invJ, invJ_perf);
+      MultAtB(invJ_perf, invJ_perf, Gij);
+
+      // Old metric tensor derivation
+      // MultAtB(Trans.InverseJacobian(), Trans.InverseJacobian(), Gij);
 
       // Calculate shapes
       el.CalcPhysShape(Trans, shape);
