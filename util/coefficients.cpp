@@ -95,7 +95,7 @@ void dsygvx_Eigensystem(DenseMatrix &a, DenseMatrix &b,
    delete [] WORK;
    delete [] B;
    if (evect == NULL) { delete [] A; }
- 
+
 #else
    MFEM_CONTRACT_VAR(a);
    MFEM_CONTRACT_VAR(ev);
@@ -108,8 +108,10 @@ real_t Eigenvalue(DenseMatrix &a, DenseMatrix &b, int i = -1)
 #ifdef MFEM_USE_LAPACK
    if (i < 0) { i = a.Width() - 1; }
    Vector ev;
-   dsygvx_Eigensystem(a, b, ev, NULL, i+1, i+1, 1.0, 0, 1);
-   return ev[0];
+   // Using 'A' computes all eigenvalues
+   // TODO: Make it compute only the largest eigenvalue
+   dsygvx_Eigensystem(a, b, ev, NULL, 'A', i+1, 1.0, 1, 0);
+   return ev[i];
 #else
    MFEM_CONTRACT_VAR(ns);
    MFEM_CONTRACT_VAR(tol);

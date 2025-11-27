@@ -118,7 +118,7 @@ public:
 
    bool Foundfunction(){ return TDFunction;}
 
-   /// Evaluate 
+   /// Evaluate
    using Coefficient::Eval;
 
    real_t Eval(ElementTransformation &T,
