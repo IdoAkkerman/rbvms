@@ -109,7 +109,6 @@ real_t Eigenvalue(DenseMatrix &a, DenseMatrix &b, int i = -1)
    if (i < 0) { i = a.Width(); }
    Vector ev;
    dsygvx_Eigensystem(a, b, ev, NULL, 'I', 0.0, 0.0, i, i);
-   ev.Print();
    return ev[0];
 
 #else
