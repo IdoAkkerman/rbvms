@@ -1,0 +1,10 @@
+#!/bin/bash
+gcc -shared -o libfun.so -fPIC condif.c
+
+exe=../../build/supg/supg
+mesh=square.mesh
+mesh=square-slit.mesh
+
+rm output* log*
+
+mpirun -n 1 $exe -m $mesh -o 2 -r 3  --strong-bdr "1 2"   -l libfun.so | tee log0
