@@ -1,0 +1,9 @@
+copy eltrans to mfem/fem
+ans recompile
+
+
+cp eltrans.* fem/fem
+
+cd build/mfem; make
+
+cd ../rbvms; make
