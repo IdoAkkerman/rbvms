@@ -19,7 +19,7 @@ double sol_phi(double *coord, int dim, double time)
 
 void advection(double *coord, int dim, double time, double *adv, int vdim)
 {
-   adv[0] = -coord[1];
+   adv[0] = coord[1];
    adv[1] = -coord[0];
 }
 
@@ -30,6 +30,6 @@ double force(double *coord, int dim, double time)
 
 double mu(double *coord, int dim, double time)
 {
-   return 0.1;
+   return 0.0;
 }
 
