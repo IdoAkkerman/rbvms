@@ -17,8 +17,61 @@
 
 using namespace mfem;
 
+/** This Class defines an integrator for
+*/
+class StabTauIntegrator : public NonlinearFormIntegrator
+{
+private:
+   // Physical parameters
+   VectorCoefficient *adv_cf;
+   Coefficient *mu_cf;
 
-enum StabilizeType{
+   InverseEstimateCoefficient *inv_cf;
+
+   /// The stabilization parameter
+   int dim;
+   void SetDim(int dim);
+
+   /// The stabilization parameter
+   real_t GetTau(real_t &k, Vector &a, DenseMatrix &Gij, real_t CI);
+
+   /// Temporary variables
+   Vector a, dphidx, shape, lshape, trail, test;
+   DenseMatrix dshape, Gij;
+
+public:
+   /// Constructor
+   StabTauIntegrator(VectorCoefficient &a,
+                     Coefficient &m,
+                     InverseEstimateCoefficient &c)
+      : adv_cf(&a), mu_cf(&m), inv_cf(&c)
+   {
+      dim = -1;
+   };
+
+   /// Destructor
+   ~StabTauIntegrator() {};
+
+   /// Compute the element nonlinear residual
+   virtual void AssembleElementVector(const FiniteElement &el,
+                                      ElementTransformation &Tr,
+                                      const Vector &elfun,
+                                      Vector &elvect) override;
+
+   /// Compute the element jacobian
+   virtual void AssembleElementGrad(const FiniteElement &el,
+                                    ElementTransformation &Tr,
+                                    const Vector &elfun,
+                                    DenseMatrix &elmat) override;
+
+   /// Give element integration rule
+   static const IntegrationRule &GetRule(const FiniteElement &trial_fe,
+                                         const FiniteElement &test_fe,
+                                         ElementTransformation &Trans);
+};
+
+enum StabilizeType
+{
    GLS = -1,
    SUPG = 0,
    VMS = 1
@@ -72,10 +125,10 @@ public:
       dim = -1;
    };
 
-   void SetStabilization(StabilizeType t){ type = t; };
-   void SetGLS(){ type = StabilizeType::GLS; };
-   void SetSUPG(){ type = StabilizeType::SUPG; };
-   void SetVMS(){ type = StabilizeType::VMS; };
+   void SetStabilization(StabilizeType t) { type = t; };
+   void SetGLS() { type = StabilizeType::GLS; };
+   void SetSUPG() { type = StabilizeType::SUPG; };
+   void SetVMS() { type = StabilizeType::VMS; };
 
    /// Destructor
    ~StabConvDifIntegrator() {};
