@@ -1,0 +1,9 @@
+#!/bin/bash
+gcc -shared -o libfun.so -fPIC condif.c
+
+exe=../../build/supg/supg
+mesh=quart-circle.mesh
+
+rm output* log*
+
+mpirun -n 1 $exe -m $mesh -o 2 -r 3  --strong-bdr "1 2 3 4"   -l libfun.so | tee log0
