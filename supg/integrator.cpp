@@ -228,8 +228,9 @@ void StabConvDifIntegrator::AssembleElementVector(const FiniteElement &el,
       test.Add((int) type*mu, lshape);  // Add Reaction stabilization term
 
       // Stabilized terms
-      real_t Ch  = inv_cf->Eval(Trans, ip);
-      elvect.Add(w*GetTau(mu, a, Gij, Ch)*res, test);
+      // real_t Ch  = inv_cf->Eval(Trans, ip);
+      real_t tau = tau_cf->Eval(Trans, ip);
+      elvect.Add(w*tau*res, test);
    }
 }
 
@@ -293,7 +294,8 @@ void StabConvDifIntegrator::AssembleElementGrad(const FiniteElement &el,
       dshape.Mult(a, trail);          // Add Convection term
       trail.Add(-mu, lshape);         // Add Diffusion term
 
-      real_t Ch  = inv_cf->Eval(Trans, ip);
-      AddMult_a_VWt(w*GetTau(mu, a, Gij, Ch), test, trail, elmat);
+      //real_t Ch  = inv_cf->Eval(Trans, ip);
+      real_t tau = tau_cf->Eval(Trans, ip);
+      AddMult_a_VWt(w*tau, test, trail, elmat);
    }
 }

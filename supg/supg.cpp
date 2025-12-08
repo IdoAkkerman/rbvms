@@ -231,10 +231,10 @@ int main(int argc, char *argv[])
 
    */
 
+   ParGridFunction tau_gf(space);
    {
       std::cout<<"Solve tau problem\n";
       // Define the gridfunction and solution vector
-      ParGridFunction tau_gf(space);
       // Is this necessary/used for tau?
       //LibCoefficient sol_phi(lib_file, "sol_phi");
       //phi_gf.ProjectCoefficient(sol_phi);
@@ -332,8 +332,10 @@ int main(int argc, char *argv[])
       // Define the inverse estimate
       InverseEstimateCoefficient inv_est(space);
 
+      GridFunctionCoefficient tau(&tau_gf);
+
       // Define weak form and evolution
-      StabConvDifIntegrator integrator(adv, mu, force, inv_est);
+      StabConvDifIntegrator integrator(adv, mu, force, inv_est, tau);
       ParNonlinearForm form(space);
       form.AddDomainIntegrator(&integrator);
       form.UseExternalIntegrators();

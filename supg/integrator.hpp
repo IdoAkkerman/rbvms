@@ -87,6 +87,9 @@ private:
 
    InverseEstimateCoefficient *inv_cf;
 
+   GridFunctionCoefficient *tau_cf;
+
+
    /// The stabilization parameter
    int dim;
    void SetDim(int dim);
@@ -110,8 +113,9 @@ public:
                          Coefficient &m,
                          Coefficient &f,
                          InverseEstimateCoefficient &c,
+                         GridFunctionCoefficient &t,
                          real_t k0 = 0.0,
-                         real_t k1 = 0.0) : adv_cf(&a), mu_cf(&m), force_cf(&f), inv_cf(&c)
+                         real_t k1 = 0.0) : adv_cf(&a), mu_cf(&m), force_cf(&f), inv_cf(&c), tau_cf(&t)
    {
       type = StabilizeType::SUPG;
       kdc0 = k0;
