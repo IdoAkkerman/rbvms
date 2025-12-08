@@ -234,29 +234,26 @@ int main(int argc, char *argv[])
    {
       std::cout<<"Solve tau problem\n";
       // Define the gridfunction and solution vector
-      ParGridFunction phi_gf(space);
-      LibCoefficient sol_phi(lib_file, "sol_phi");
-      phi_gf.ProjectCoefficient(sol_phi);
+      ParGridFunction tau_gf(space);
+      // Is this necessary/used for tau?
+      //LibCoefficient sol_phi(lib_file, "sol_phi");
+      //phi_gf.ProjectCoefficient(sol_phi);
       Vector xp;
-      phi_gf.GetTrueDofs(xp);
+      tau_gf.GetTrueDofs(xp);
 
       // Define the visualisation output
       VisItDataCollection vdc("tau", &pmesh);
       vdc.SetPrefixPath(vis_dir);
-      vdc.RegisterField("phi", &phi_gf);
+      vdc.RegisterField("tau", &tau_gf);
       vdc.SetCycle(0);
       vdc.Save();
 
       // Define the physical parameters
       LibVectorCoefficient adv(dim, lib_file, "advection");
       LibCoefficient mu(lib_file, "mu", false, mu_param);
-      LibCoefficient force(lib_file, "force");
-
-      // Define the inverse estimate
-      InverseEstimateCoefficient inv_est(space);
 
       // Define weak form and evolution
-      StabTauIntegrator integrator(adv, mu, inv_est);
+      StabTauIntegrator integrator(adv, mu);
       ParNonlinearForm form(space);
       form.AddDomainIntegrator(&integrator);
       form.UseExternalIntegrators();
@@ -297,7 +294,7 @@ int main(int argc, char *argv[])
       Vector zero(space->TrueVSize());
       zero = 0.0;
       newton_solver.Mult(zero, xp);
-      phi_gf.Distribute(xp);
+      tau_gf.Distribute(xp);
 
       // Write solution
       vdc.SetCycle(1);

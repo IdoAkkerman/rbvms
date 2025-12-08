@@ -9,17 +9,6 @@
 
 using namespace mfem;
 
-// This file is part of the RBVMS application. For more information and source
-// code availability visit https://idoakkerman.github.io/
-//
-// RBVMS is free software; you can redistribute it and/or modify it under the
-// terms of the BSD-3 license.
-//------------------------------------------------------------------------------
-
-#include "integrator.hpp"
-
-using namespace mfem;
-
 // Define the integration rule based on FE order
 const IntegrationRule &StabTauIntegrator::GetRule(
    const FiniteElement &trial_fe,
@@ -29,26 +18,6 @@ const IntegrationRule &StabTauIntegrator::GetRule(
    int order = trial_fe.GetOrder() + test_fe.GetOrder();
    return IntRules.Get(trial_fe.GetGeomType(), order);
 }
-
-// Define convective tau
-real_t StabTauIntegrator::GetTau(real_t &k, Vector &a, DenseMatrix &Gij,
-                                 real_t Ch)
-{
-   // printf("C*h = %f\n", Ch);
-   Ch = 1/Ch;
-   double tau = 1e-10;
-   int dim = Gij.Width();
-   for (int j = 0; j < dim; j++)
-   {
-      for (int i = 0; i < dim; i++)
-      {
-         tau += Gij(i,j)*a[i]*a[j] + Ch*Ch*k*k;
-      }
-   }
-   return 1.0/sqrt(tau);
-}
-
-
 
 // Set the dimension of temporary variables
 void StabTauIntegrator::SetDim(int d)

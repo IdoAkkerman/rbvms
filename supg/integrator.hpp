@@ -26,14 +26,9 @@ private:
    VectorCoefficient *adv_cf;
    Coefficient *mu_cf;
 
-   InverseEstimateCoefficient *inv_cf;
-
    /// The stabilization parameter
    int dim;
    void SetDim(int dim);
-
-   /// The stabilization parameter
-   real_t GetTau(real_t &k, Vector &a, DenseMatrix &Gij, real_t CI);
 
    /// Temporary variables
    Vector a, dphidx, shape, lshape, trail, test;
@@ -42,9 +37,8 @@ private:
 public:
    /// Constructor
    StabTauIntegrator(VectorCoefficient &a,
-                     Coefficient &m,
-                     InverseEstimateCoefficient &c)
-      : adv_cf(&a), mu_cf(&m), inv_cf(&c)
+                     Coefficient &m)
+      : adv_cf(&a), mu_cf(&m)
    {
       dim = -1;
    };
