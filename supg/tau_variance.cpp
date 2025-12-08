@@ -1,8 +1,8 @@
 // This file implements a small test to measure the variance of the stabilization
-// parameter tau under permutations of triangle vertex ordering. The current
+// parameter tau under permutations of element vertex ordering. The current
 // method in supg/integrator.cpp uses GeomToPerfGeomJac, which should make tau
-// invariant to vertex ordering for a single linear triangle because it maps to
-// an equilateral (perfect) reference.
+// invariant to vertex ordering for a single linear element because it maps to
+// a perfect reference (equilateral triangle / regular tetrahedron, etc.).
 
 #include "mfem.hpp"
 #include <iostream>
@@ -39,6 +39,32 @@ static std::string BuildSingleTriMeshText(const std::array<std::array<double,2>,
    return os.str();
 }
 
+static std::string BuildSingleTetMeshText(const std::array<std::array<double,3>,4> &v)
+{
+   // Reproduce mfem/data/ref-tetrahedron.mesh layout but with custom vertex order
+   std::ostringstream os;
+   os << "MFEM mesh v1.0\n\n";
+   os << "dimension\n3\n\n";
+   os << "elements\n1\n";
+   // Element: attribute=1, geometry=4 (TETRAHEDRON), vertices 0 1 2 3
+   os << "1 4 0 1 2 3\n\n";
+   // Boundary: 4 triangular faces with attributes 1..4
+   os << "boundary\n4\n";
+   os << "1 2 1 2 3\n";
+   os << "2 2 0 3 2\n";
+   os << "3 2 0 1 3\n";
+   os << "4 2 0 2 1\n\n";
+   // Vertices (4) with dimension flag 3
+   os << "vertices\n4\n3\n";
+   os.setf(std::ios::fixed); os.precision(15);
+   for (int i = 0; i < 4; i++)
+   {
+      os << v[i][0] << ' ' << v[i][1] << ' ' << v[i][2] << "\n";
+   }
+   os << "\n";
+   return os.str();
+}
+
 static double TauFromG(const DenseMatrix &G, const Vector &a, double k, double Ch)
 {
    // Mirror supg/integrator.cpp: StabConvDifIntegrator::GetTau
@@ -62,15 +88,27 @@ static void ComputeTausForMeshText(const std::string &mesh_text,
                                    const Vector &a, double k, double Ch)
 {
    std::istringstream is(mesh_text);
-   Mesh mesh(is, 1, 0, false); // generate_nodes=1 to get Nodes if needed, do not fix orientation
+   Mesh mesh(is, 1, 0, false);
 
    // Uncomment below to check for negative determinant
    // int ninv = mesh.CheckElementOrientation(false);
    // std::cout << "Inverted elements (without fixing): " << ninv << "\n";
 
-   // One element mesh, just pick centroid of reference triangle
+   // One element mesh, pick centroid of reference element (triangle/tetra)
    ElementTransformation *T = mesh.GetElementTransformation(0);
-   IntegrationPoint ip; ip.Set2(1.0/3.0, 1.0/3.0);
+   IntegrationPoint ip;
+   if (mesh.Dimension() == 2)
+   {
+      ip.Set2(1.0/3.0, 1.0/3.0);
+   }
+   else if (mesh.Dimension() == 3)
+   {
+      ip.Set3(1.0/4.0, 1.0/4.0, 1.0/4.0);
+   }
+   else
+   {
+      MFEM_ABORT("Unsupported mesh dimension in tau_variance test.");
+   }
    T->SetIntPoint(&ip);
 
    const DenseMatrix &invJ = T->InverseJacobian();
@@ -89,6 +127,118 @@ static void ComputeTausForMeshText(const std::string &mesh_text,
    tau_new = TauFromG(G_new, a, k, Ch);
 }
 
+// -------------------- Small utilities and geometry-specific runners --------------------
+
+struct Stats
+{
+   double mean = 0.0;
+   double var  = 0.0;
+   double mn   = 0.0;
+   double mx   = 0.0;
+};
+
+static Stats ComputeStats(const std::vector<double> &x)
+{
+   MFEM_VERIFY(!x.empty(), "ComputeStats requires non-empty input");
+   Stats s{};
+   for (double v : x) s.mean += v;
+   s.mean /= x.size();
+   for (double v : x) { const double d = v - s.mean; s.var += d*d; }
+   s.var /= x.size();
+   s.mn = x[0]; s.mx = x[0];
+   for (double v : x) { if (v < s.mn) s.mn = v; if (v > s.mx) s.mx = v; }
+   return s;
+}
+
+template <size_t N>
+static void PrintPermutationValues(const std::vector<std::array<int,N>> &perms,
+                                   const std::vector<double> &taus_old,
+                                   const std::vector<double> &taus_new)
+{
+   using std::cout; using std::endl;
+   cout << "\nValues per permutation (";
+   for (size_t i = 0; i < N; i++) { cout << 'p' << i << (i+1<N ? ' ' : ')'); }
+   cout << ":" << endl;
+   for (size_t i = 0; i < perms.size(); i++)
+   {
+      cout << "perm (";
+      for (size_t j = 0; j < N; j++) { cout << perms[i][j] << (j+1<N ? ' ' : ')'); }
+      cout << " : old=" << taus_old[i] << ", new=" << taus_new[i] << endl;
+   }
+}
+
+static int RunTriangleTest(const Vector &a2, double k, double Ch)
+{
+   using std::cout; using std::endl;
+
+   const std::array<std::array<double,2>,3> base = {{{0.0,0.0},{1.0,0.0},{0.0,1.0}}};
+   std::array<int,3> perm = {0,1,2};
+
+   std::vector<double> taus_old, taus_new;
+   std::vector<std::array<int,3>> perms_record;
+
+   do {
+      std::array<std::array<double,2>,3> v = { base[perm[0]], base[perm[1]], base[perm[2]] };
+      std::string mesh_text = BuildSingleTriMeshText(v);
+      double to = 0.0, tn = 0.0;
+      ComputeTausForMeshText(mesh_text, to, tn, a2, k, Ch);
+      taus_old.push_back(to); taus_new.push_back(tn); perms_record.push_back(perm);
+   } while (std::next_permutation(perm.begin(), perm.end()));
+
+   const Stats so = ComputeStats(taus_old);
+   const Stats sn = ComputeStats(taus_new);
+
+   cout << "Tau variance test over all 6 permutations of a single triangle" << endl;
+   cout << "Advective velocity a = (" << a2[0] << ", " << a2[1] << ")";
+   cout << ", k = " << k << ", Ch = " << Ch << endl;
+
+   cout.setf(std::ios::scientific); cout.precision(6);
+   cout << "Old method (raw invJ):    mean=" << so.mean << ", var=" << so.var
+        << ", min=" << so.mn << ", max=" << so.mx << endl;
+   cout << "New method (perf geom):   mean=" << sn.mean << ", var=" << sn.var
+        << ", min=" << sn.mn << ", max=" << sn.mx << endl;
+
+   PrintPermutationValues(perms_record, taus_old, taus_new);
+
+   // Same failure criterion used previously
+   return (sn.var > 1e-28 && sn.var > 1e-6 * so.var) ? 1 : 0;
+}
+
+static int RunTetrahedronTest(const Vector &a3, double k, double Ch)
+{
+   using std::cout; using std::endl;
+
+   const std::array<std::array<double,3>,4> base = {{{{0.0,0.0,0.0}},{{1.0,0.0,0.0}},{{0.0,1.0,0.0}},{{0.0,0.0,1.0}}}};
+   std::array<int,4> perm = {0,1,2,3};
+
+   std::vector<double> taus_old, taus_new;
+   std::vector<std::array<int,4>> perms_record;
+
+   do {
+      std::array<std::array<double,3>,4> v = { base[perm[0]], base[perm[1]], base[perm[2]], base[perm[3]] };
+      std::string mesh_text = BuildSingleTetMeshText(v);
+      double to = 0.0, tn = 0.0;
+      ComputeTausForMeshText(mesh_text, to, tn, a3, k, Ch);
+      taus_old.push_back(to); taus_new.push_back(tn); perms_record.push_back(perm);
+   } while (std::next_permutation(perm.begin(), perm.end()));
+
+   const Stats so = ComputeStats(taus_old);
+   const Stats sn = ComputeStats(taus_new);
+
+   cout << "\nTau variance test over all 24 permutations of a single tetrahedron" << endl;
+   cout << "Advective velocity a = (" << a3[0] << ", " << a3[1] << ", " << a3[2] << ")";
+   cout << ", k = " << k << ", Ch = " << Ch << endl;
+
+   cout << "Old method (raw invJ):    mean=" << so.mean << ", var=" << so.var
+        << ", min=" << so.mn << ", max=" << so.mx << endl;
+   cout << "New method (perf geom):   mean=" << sn.mean << ", var=" << sn.var
+        << ", min=" << sn.mn << ", max=" << sn.mx << endl;
+
+   PrintPermutationValues(perms_record, taus_old, taus_new);
+
+   return (sn.var > 1e-28 && sn.var > 1e-6 * so.var) ? 1 : 0;
+}
+
 int main(int argc, char** argv)
 {
    // Advection and diffusion parameters to play around
@@ -97,54 +247,13 @@ int main(int argc, char** argv)
    if (argc >= 4) { k = atof(argv[3]); }
    if (argc >= 5) { Ch = atof(argv[4]); }
 
-   Vector a(2); a[0] = ax; a[1] = ay;
+   // Triangle
+   Vector a2(2); a2[0] = ax; a2[1] = ay;
+   int fail = RunTriangleTest(a2, k, Ch);
 
-   // Base vertex coordinates identical to mfem/data/ref-triangle.mesh
-   const std::array<std::array<double,2>,3> base = {{{0.0,0.0},{1.0,0.0},{0.0,1.0}}};
-   std::array<int,3> perm = {0,1,2};
+   // Tetrahedron
+   Vector a3(3); a3[0] = ax; a3[1] = ay; a3[2] = 0.2;
+   fail |= RunTetrahedronTest(a3, k, Ch);
 
-   std::vector<double> taus_old, taus_new;
-   std::vector<std::array<int,3>> perms_record;
-   do {
-      std::array<std::array<double,2>,3> v = { base[perm[0]], base[perm[1]], base[perm[2]] };
-      std::string mesh_text = BuildSingleTriMeshText(v);
-      double to=0.0, tn=0.0;
-      ComputeTausForMeshText(mesh_text, to, tn, a, k, Ch);
-      taus_old.push_back(to);
-      taus_new.push_back(tn);
-      perms_record.push_back(perm);
-   } while (std::next_permutation(perm.begin(), perm.end()));
-
-   auto stats = [](const std::vector<double> &x){
-      double mean = 0.0; for (double v : x) mean += v; mean /= x.size();
-      double var = 0.0; for (double v : x) { double d=v-mean; var += d*d; } var /= x.size();
-      double mn = x[0], mx = x[0];
-      for (double v : x) { if (v<mn) mn=v; if (v>mx) mx=v; }
-      return std::tuple<double,double,double,double>(mean,var,mn,mx);
-   };
-
-   auto [m_old,v_old,min_old,max_old] = stats(taus_old);
-   auto [m_new,v_new,min_new,max_new] = stats(taus_new);
-
-   cout << "Tau variance test over all 6 permutations of a single triangle" << endl;
-   cout << "Advective velocity a = (" << a[0] << ", " << a[1] << ")";
-   cout << ", k = " << k << ", Ch = " << Ch << endl;
-
-   cout.setf(std::ios::scientific); cout.precision(6);
-   cout << "Old method (raw invJ):    mean=" << m_old << ", var=" << v_old
-        << ", min=" << min_old << ", max=" << max_old << endl;
-   cout << "New method (perf geom):   mean=" << m_new << ", var=" << v_new
-        << ", min=" << min_new << ", max=" << max_new << endl;
-
-   cout << "\nValues per permutation (p0 p1 p2):" << endl;
-   for (size_t i = 0; i < perms_record.size(); i++)
-   {
-      const auto &p = perms_record[i];
-      cout << "perm (" << p[0] << ' ' << p[1] << ' ' << p[2] << ") : old="
-           << taus_old[i] << ", new=" << taus_new[i] << endl;
-   }
-
-   // Return non-zero if new variance is unexpectedly large compared to old.
-   // Threshold is arbitrary but ensures the test can be used in CI if desired.
-   return (v_new > 1e-28 && v_new > 1e-6 * v_old) ? 1 : 0;
+   return fail;
 }
