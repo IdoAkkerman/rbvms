@@ -96,7 +96,7 @@ private:
 
    /// The stabilization parameter
    StabilizeType type;
-   real_t GetTau(real_t &k, Vector &a, DenseMatrix &Gij, real_t CI);
+   real_t GetTau(real_t &k, Vector &a, DenseMatrix &Gij, real_t global_tau);
 
    /// The discontinuity capturing parameter
    real_t kdc0;  // inconsistent part

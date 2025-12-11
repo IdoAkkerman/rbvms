@@ -132,21 +132,18 @@ const IntegrationRule &StabConvDifIntegrator::GetRule(
 }
 
 // Define convective tau
-real_t StabConvDifIntegrator::GetTau(real_t &k, Vector &a, DenseMatrix &Gij,
-                                     real_t Ch)
+real_t StabConvDifIntegrator::GetTau(real_t &k, Vector &a, DenseMatrix &Gij, real_t global_tau)
 {
-   // printf("C*h = %f\n", Ch);
-   Ch = 1/Ch;
    double tau = 1e-10;
    int dim = Gij.Width();
    for (int j = 0; j < dim; j++)
    {
       for (int i = 0; i < dim; i++)
       {
-         tau += Gij(i,j)*a[i]*a[j] + Ch*Ch*k*k;
+         tau += Gij(i,j)*a[i]*a[j];
       }
    }
-   return 1.0/sqrt(tau);
+   return 1/(1/sqrt(tau) + 1/global_tau);
 }
 
 // Define convective kdc
@@ -228,8 +225,7 @@ void StabConvDifIntegrator::AssembleElementVector(const FiniteElement &el,
       test.Add((int) type*mu, lshape);  // Add Reaction stabilization term
 
       // Stabilized terms
-      // real_t Ch  = inv_cf->Eval(Trans, ip);
-      real_t tau = tau_cf->Eval(Trans, ip);
+      real_t tau = GetTau(mu, a, Gij, tau_cf->Eval(Trans, ip));;
       elvect.Add(w*tau*res, test);
    }
 }
@@ -294,8 +290,7 @@ void StabConvDifIntegrator::AssembleElementGrad(const FiniteElement &el,
       dshape.Mult(a, trail);          // Add Convection term
       trail.Add(-mu, lshape);         // Add Diffusion term
 
-      //real_t Ch  = inv_cf->Eval(Trans, ip);
-      real_t tau = tau_cf->Eval(Trans, ip);
+      real_t tau = GetTau(mu, a, Gij, tau_cf->Eval(Trans, ip));;
       AddMult_a_VWt(w*tau, test, trail, elmat);
    }
 }
