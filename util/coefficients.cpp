@@ -111,8 +111,8 @@ real_t Eigenvalue(DenseMatrix &a, DenseMatrix &b, int i = -1)
    dsygvx_Eigensystem(a, b, ev, NULL, i+1, i+1, 1.0, 0, 1);
    return ev[0];
 #else
-   MFEM_CONTRACT_VAR(ns);
-   MFEM_CONTRACT_VAR(tol);
+  // MFEM_CONTRACT_VAR(ns);
+  // MFEM_CONTRACT_VAR(tol);
    mfem_error("DenseMatrix::Eigenvalue: Compiled without LAPACK");
    return 0.0;
 #endif
