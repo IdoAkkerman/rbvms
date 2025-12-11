@@ -250,8 +250,11 @@ int main(int argc, char *argv[])
    LibCoefficient mu(lib_file, "mu", false, mu_param);
    LibCoefficient force(lib_file, "force");
 
+   // Define the inverse estimate
+   InverseEstimateCoefficient inv_est(space);
+
    // Define weak form and evolution
-   StabConvDifIntegrator integrator(adv, mu, force);
+   StabConvDifIntegrator integrator(adv, mu, force, inv_est);
    ParNonlinearForm form(space);
    form.AddDomainIntegrator(&integrator);
    form.UseExternalIntegrators();

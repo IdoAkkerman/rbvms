@@ -1,0 +1,14 @@
+diff --git a/fem/fe/fe_base.cpp b/fem/fe/fe_base.cpp
+index ab1977ddbe..c350cae54c 100644
+--- a/fem/fe/fe_base.cpp
++++ b/fem/fe/fe_base.cpp
+@@ -111,7 +111,8 @@ void FiniteElement::GetFaceDofs(int face, int **dofs, int *ndofs) const
+ void FiniteElement::CalcHessian(const IntegrationPoint &ip,
+                                 DenseMatrix &h) const
+ {
+-   MFEM_ABORT("method is not overloaded");
++   h = 0.0;
++   // MFEM_ABORT("method is not overloaded");
+ }
+ 
+ void FiniteElement::GetLocalInterpolation(ElementTransformation &Trans,
