@@ -227,14 +227,21 @@ int main(int argc, char *argv[])
    // Define the gridfunction and solution vector
    ParGridFunction phi_gf(space);
    LibCoefficient sol_phi(lib_file, "sol_phi");
-   phi_gf.ProjectCoefficient(sol_phi);
+   phi_gf.ProjectCoefficient(sol_phi, ProjectType::ELEMENT);
    Vector xp;
    phi_gf.GetTrueDofs(xp);
 
    // Define the visualisation output
+   FiniteElementCollection* ifec;
+   ifec = new H1_FECollection(abs(order), dim);
+   ParFiniteElementSpace* ispace;
+   ispace = new ParFiniteElementSpace(&pmesh, ifec);
+   ParGridFunction phi_igf(ispace);
+   GridFunctionCoefficient phi_gf_cf(&phi_gf);
+   phi_igf.ProjectCoefficient(phi_gf_cf);
    VisItDataCollection vdc("step", &pmesh);
    vdc.SetPrefixPath(vis_dir);
-   vdc.RegisterField("phi", &phi_gf);
+   vdc.RegisterField("phi", &phi_igf);
    vdc.SetCycle(0);
    vdc.Save();
 
@@ -308,6 +315,7 @@ int main(int argc, char *argv[])
    }
 
    // Write solution
+   phi_igf.ProjectCoefficient(phi_gf_cf);
    vdc.SetCycle(1);
    vdc.Save();
 
