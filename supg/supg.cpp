@@ -224,6 +224,9 @@ int main(int argc, char *argv[])
          }
       }
    }
+
+   VisItDataCollection vdc("step", &pmesh);
+
    /*
 
 
@@ -242,7 +245,6 @@ int main(int argc, char *argv[])
       tau_gf.GetTrueDofs(xp);
 
       // Define the visualisation output
-      VisItDataCollection vdc("tau", &pmesh);
       vdc.SetPrefixPath(vis_dir);
       vdc.RegisterField("tau", &tau_gf);
       vdc.SetCycle(0);
@@ -325,7 +327,6 @@ int main(int argc, char *argv[])
       ParGridFunction phi_igf(ispace);
       GridFunctionCoefficient phi_gf_cf(&phi_gf);
       phi_igf.ProjectCoefficient(phi_gf_cf);
-      VisItDataCollection vdc("phi", &pmesh);
       vdc.SetPrefixPath(vis_dir);
       vdc.RegisterField("phi", &phi_igf);
       vdc.SetCycle(0);
