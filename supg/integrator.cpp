@@ -24,13 +24,9 @@ const IntegrationRule &StabConvDifIntegrator::GetRule(
 // -----------------------------------------------------------------------------
 // MATRIX–TENSOR SUPG STABILIZATION PARAMETER
 //
-//   tau^{-2} = a^T G a + C_I^2 * k^2 * (G : G)
+//   τ^{-2} = a^T G a + C_I^2 * k^2 * (G : G)
+//   or τ = ( aᵀ G a + C_I² k² (G : G) )^{-1/2}
 //   G = J^{-T} J^{-1}
-//
-// This formulation:
-//   - is dimension-independent (2D / 3D)
-//   - captures mesh anisotropy naturally
-//   - avoids ad-hoc scalar mesh sizes
 // -----------------------------------------------------------------------------
 real_t StabConvDifIntegrator::GetTau(real_t &k, Vector &a, DenseMatrix &Gij)
 {
