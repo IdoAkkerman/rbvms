@@ -58,3 +58,5 @@ cases/*/*.bak
 *.sif/
 *.img
 *.img/
+.DS_Store
+build-serial/
