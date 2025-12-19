@@ -225,7 +225,6 @@ int main(int argc, char *argv[])
       }
    }
 
-   VisItDataCollection vdc("step", &pmesh);
 
    /*
 
@@ -239,14 +238,22 @@ int main(int argc, char *argv[])
       std::cout<<"Solve tau problem\n";
       // Define the gridfunction and solution vector
       // Is this necessary/used for tau?
-      //LibCoefficient sol_phi(lib_file, "sol_phi");
-      //phi_gf.ProjectCoefficient(sol_phi);
+      LibCoefficient sol_phi(lib_file, "sol_phi");
+      tau_gf.ProjectCoefficient(sol_phi, ProjectType::ELEMENT);
       Vector xp;
       tau_gf.GetTrueDofs(xp);
 
       // Define the visualisation output
+      FiniteElementCollection* ifec;
+      ifec = new H1_FECollection(abs(order), dim);
+      ParFiniteElementSpace* ispace;
+      ispace = new ParFiniteElementSpace(&pmesh, ifec);
+      ParGridFunction tau_igf(ispace);
+      GridFunctionCoefficient tau_gf_cf(&tau_gf);
+      tau_igf.ProjectCoefficient(tau_gf_cf);
+      VisItDataCollection vdc("tau", &pmesh);
       vdc.SetPrefixPath(vis_dir);
-      vdc.RegisterField("tau", &tau_gf);
+      vdc.RegisterField("tau", &tau_igf);
       vdc.SetCycle(0);
       vdc.Save();
 
@@ -299,6 +306,7 @@ int main(int argc, char *argv[])
       tau_gf.Distribute(xp);
 
       // Write solution
+      tau_igf.ProjectCoefficient(tau_gf_cf);
       vdc.SetCycle(1);
       vdc.Save();
    }
@@ -327,6 +335,7 @@ int main(int argc, char *argv[])
       ParGridFunction phi_igf(ispace);
       GridFunctionCoefficient phi_gf_cf(&phi_gf);
       phi_igf.ProjectCoefficient(phi_gf_cf);
+      VisItDataCollection vdc("phi", &pmesh);
       vdc.SetPrefixPath(vis_dir);
       vdc.RegisterField("phi", &phi_igf);
       vdc.SetCycle(0);
@@ -385,11 +394,12 @@ int main(int argc, char *argv[])
       zero = 0.0;
       newton_solver.Mult(zero, xp);
       phi_gf.Distribute(xp);
-	  std::cout << "Peclet numbers for all elements:\n";
-	  //for (size_t i = 0; i < integrator.elementPec.size(); i++)
+
+      std::cout << "Peclet numbers for all elements:\n";
+      //for (size_t i = 0; i < integrator.elementPec.size(); i++)
       for (size_t i = 0; i <2; i++)
       {
-      std::cout << "Element " << i << ": " << integrator.elementPec[i] << "\n";
+         std::cout << "Element " << i << ": " << integrator.elementPec[i] << "\n";
       }
 
 
