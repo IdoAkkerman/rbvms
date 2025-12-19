@@ -385,6 +385,13 @@ int main(int argc, char *argv[])
       zero = 0.0;
       newton_solver.Mult(zero, xp);
       phi_gf.Distribute(xp);
+	  std::cout << "Peclet numbers for all elements:\n";
+	  //for (size_t i = 0; i < integrator.elementPec.size(); i++)
+      for (size_t i = 0; i <2; i++)
+      {
+      std::cout << "Element " << i << ": " << integrator.elementPec[i] << "\n";
+      }
+
 
       // Compute errors
       LibVectorCoefficient sol_grad(dim, lib_file, "grad_phi", false);

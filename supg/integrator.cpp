@@ -156,6 +156,8 @@ real_t StabConvDifIntegrator::GetKdc(Vector &a,
    return kdc0*h*a.Norml2() + kdc1*h*fabs(res)/(dphidx.Norml2() + 1e-10);
 }
 
+
+
 // Set the dimension of temporary variables
 void StabConvDifIntegrator::SetDim(int d)
 {
@@ -227,7 +229,16 @@ void StabConvDifIntegrator::AssembleElementVector(const FiniteElement &el,
       // Stabilized terms
       real_t tau = GetTau(mu, a, Gij, tau_cf->Eval(Trans, ip));;
       elvect.Add(w*tau*res, test);
+	
    }
+     // Compute element length scale
+	 real_t h = 1.0 / sqrt(Gij.Trace() / Gij.Width());
+
+	// Compute Peclet number		
+	real_t pec = a.Norml2() * h / mu;
+
+	// Store in vector
+	elementPec.push_back(pec);
 }
 
 // Compute the element jacobian

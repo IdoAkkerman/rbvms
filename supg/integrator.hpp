@@ -102,12 +102,19 @@ private:
    real_t kdc0;  // inconsistent part
    real_t kdc1;  // consistent part
    real_t GetKdc(Vector &a, real_t &res, Vector &dphidx, DenseMatrix &Gij);
+   
+   
 
    /// Temporary variables
    Vector a, dphidx, shape, lshape, trail, test;
    DenseMatrix dshape, Gij;
 
 public:
+   /// The Peclet number 
+    std::vector<real_t> elementPec;  // Peclet numbers per element
+
+    // Optionally, a function to clear before assembly
+    void ClearPec() { elementPec.clear(); }
    /// Constructor
    StabConvDifIntegrator(VectorCoefficient &a,
                          Coefficient &m,
