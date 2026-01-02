@@ -237,11 +237,14 @@ int main(int argc, char *argv[])
    ParFiniteElementSpace* ispace;
    ispace = new ParFiniteElementSpace(&pmesh, ifec);
    ParGridFunction phi_igf(ispace);
+   ParGridFunction err_igf(ispace);
    GridFunctionCoefficient phi_gf_cf(&phi_gf);
    phi_igf.ProjectCoefficient(phi_gf_cf);
+   err_igf = 0.0;
    VisItDataCollection vdc("step", &pmesh);
    vdc.SetPrefixPath(vis_dir);
    vdc.RegisterField("phi", &phi_igf);
+   vdc.RegisterField("error", &err_igf);
    vdc.SetCycle(0);
    vdc.Save();
 
@@ -319,6 +322,8 @@ int main(int argc, char *argv[])
 
    // Write solution
    phi_igf.ProjectCoefficient(phi_gf_cf);
+   err_igf.ProjectCoefficient(sol_phi);
+   err_igf -= phi_igf;
    vdc.SetCycle(1);
    vdc.Save();
 
