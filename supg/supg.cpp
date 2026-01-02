@@ -46,8 +46,7 @@ void CheckBoundaries(Array<bool> &bnd_flags,
    }
 }
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
    // Initialize MPI and HYPRE and print info
    Mpi::Init(argc, argv);
    int num_procs = Mpi::WorldSize();
@@ -333,11 +332,14 @@ int main(int argc, char *argv[])
       ParFiniteElementSpace* ispace;
       ispace = new ParFiniteElementSpace(&pmesh, ifec);
       ParGridFunction phi_igf(ispace);
+      ParGridFunction err_igf(ispace);
       GridFunctionCoefficient phi_gf_cf(&phi_gf);
       phi_igf.ProjectCoefficient(phi_gf_cf);
-      VisItDataCollection vdc("phi", &pmesh);
+      err_igf = 0.0;
+      VisItDataCollection vdc("step", &pmesh);
       vdc.SetPrefixPath(vis_dir);
       vdc.RegisterField("phi", &phi_igf);
+      vdc.RegisterField("error", &err_igf);
       vdc.SetCycle(0);
       vdc.Save();
 
@@ -402,7 +404,6 @@ int main(int argc, char *argv[])
          std::cout << "Element " << i << ": " << integrator.elementPec[i] << "\n";
       }
 
-
       // Compute errors
       LibVectorCoefficient sol_grad(dim, lib_file, "grad_phi", false);
       if (sol_grad.Foundfunction())
@@ -416,17 +417,17 @@ int main(int argc, char *argv[])
 
          double err_phi  = phi_gf.ComputeL2Error(sol_phi, irs);
          double norm_phi = ComputeGlobalLpNorm(2., sol_phi, pmesh, irs);
-         std::cout << "|| phi_h - phi_ex || / || phi_ex || = " << err_phi / norm_phi <<
-                   "\n";
+         std::cout << "|| phi_h - phi_ex || / || phi_ex || = " << err_phi / norm_phi << "\n";
 
          err_phi  = phi_gf.ComputeGradError(&sol_grad, irs);
          norm_phi =  ComputeGlobalLpNorm(2., sol_grad, pmesh, irs);
-         std::cout << "||grad phi_h - grad phi_ex || / || grad phi_ex || = " << err_phi /
-                   norm_phi << "\n";
+         std::cout << "||grad phi_h - grad phi_ex || / || grad phi_ex || = " << err_phi / norm_phi << "\n";
       }
 
       // Write solution
       phi_igf.ProjectCoefficient(phi_gf_cf);
+      err_igf.ProjectCoefficient(sol_phi);
+      err_igf -= phi_igf;
       vdc.SetCycle(1);
       vdc.Save();
 
@@ -438,11 +439,11 @@ int main(int argc, char *argv[])
          sol_sock.precision(8);
          sol_sock << "solution\n" << pmesh << phi_gf << flush;
       }
+
+      // Free the used memory.
+      delete fec;
+      delete space;
+
+      return 0;
    }
-
-   // Free the used memory.
-   delete fec;
-   delete space;
-
-   return 0;
 }
