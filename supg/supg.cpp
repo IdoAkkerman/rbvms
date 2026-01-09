@@ -366,7 +366,7 @@ int main(int argc, char *argv[])
       else {
          std::ofstream file("plot.csv");
          if (file.is_open()) {
-            file << 'h' << ',' << "L2 error";
+            file << 'h' << ',' << "L2_error";
             file << "\n";
             file << h << ',' << final_error;
             file << "\n";
