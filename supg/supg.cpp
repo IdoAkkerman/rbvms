@@ -19,11 +19,23 @@
 
 #include "integrator.hpp"
 
+#include <fstream>
+#include <iostream>
+#include <filesystem>
+#include <vector>
+#include <string>
+
 using namespace std;
 using namespace mfem;
 
 extern void printInfo();
 extern void line(int len);
+
+namespace fs = std::filesystem;
+
+bool fileExists(const std::string& filename) {
+    return fs::exists(filename);
+}
 
 // Routine for checking duplicity of boundary conditions
 void CheckBoundaries(Array<bool> &bnd_flags,
@@ -63,6 +75,8 @@ int main(int argc, char *argv[])
    const char *ref_file  = "";
    int order = 1;
    int ref_levels = 0;
+   int plotter = 0;
+   
    args.AddOption(&mesh_file, "-m", "--mesh",
                   "Mesh file to use.");
    args.AddOption(&ref_file, "-rf", "--ref-file",
@@ -71,6 +85,8 @@ int main(int argc, char *argv[])
                   "Number of times to refine the mesh.");
    args.AddOption(&order, "-o", "--order",
                   "Finite element order isoparametric space.");
+   args.AddOption(&plotter, "-pl","--plot",
+                  "Plot the dataset by using 1.");
 
    // Problem parameters
    Array<int> strong_bdr;
@@ -318,6 +334,43 @@ int main(int argc, char *argv[])
       err_phi  = phi_gf.ComputeGradError(&sol_grad, irs);
       norm_phi =  ComputeGlobalLpNorm(2., sol_grad, pmesh, irs);
       std::cout << "||grad phi_h - grad phi_ex || / || grad phi_ex || = " << err_phi / norm_phi << "\n";
+   }
+
+   if (plotter==1)
+   {
+      int order_quad = max(2, 2*order+1);
+      const IntegrationRule *irs[Geometry::NumGeom];
+      for (int i=0; i < Geometry::NumGeom; ++i)
+      {
+         irs[i] = &(IntRules.Get(i, order_quad));
+      }
+
+      double err_phi  = phi_gf.ComputeL2Error(sol_phi, irs);
+      double norm_phi = ComputeGlobalLpNorm(2., sol_phi, pmesh, irs);
+      double final_error = err_phi/norm_phi;
+      double h = 1.0;
+      std::cout << "|| phi_h - phi_ex || / || phi_ex || = " << err_phi / norm_phi << "\n";
+
+      std::string filename = "plot.csv";
+      if (fileExists(filename)) {
+         std::ofstream outfile("plot.csv", std::ios::app);
+         if (outfile.is_open()) {
+            outfile << h << ',' << final_error;
+            outfile << "\n";
+            outfile.close();
+         } 
+         else {
+            std::cerr << "Unable to open file for appending.\n";
+         }
+      } 
+      else {
+         std::ofstream file("plot.csv");
+         if (file.is_open()) {
+            file << 'h' << ',' << 'L2 error';
+            file << h << ',' << final_error;
+            file.close();
+         }
+      }
    }
 
    // Write solution
