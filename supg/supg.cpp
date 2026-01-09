@@ -348,7 +348,7 @@ int main(int argc, char *argv[])
       double err_phi  = phi_gf.ComputeL2Error(sol_phi, irs);
       double norm_phi = ComputeGlobalLpNorm(2., sol_phi, pmesh, irs);
       double final_error = err_phi/norm_phi;
-      double h = 1.0;
+      double h = integrator.GetMinH();
       std::cout << "|| phi_h - phi_ex || / || phi_ex || = " << err_phi / norm_phi << "\n";
 
       std::string filename = "plot.csv";
@@ -366,8 +366,10 @@ int main(int argc, char *argv[])
       else {
          std::ofstream file("plot.csv");
          if (file.is_open()) {
-            file << 'h' << ',' << 'L2 error';
+            file << 'h' << ',' << "L2 error";
+            file << "\n";
             file << h << ',' << final_error;
+            file << "\n";
             file.close();
          }
       }
