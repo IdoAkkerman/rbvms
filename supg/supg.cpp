@@ -32,6 +32,38 @@ extern void printInfo();
 extern void line(int len);
 
 namespace fs = std::filesystem;
+/**
+ * Coefficient class for mesh-agnostic interpolation of a GridFunction.
+ *
+ * Allows evaluating a GridFunction at arbitrary physical coordinates
+ * by using the `Mesh::FindPoints` method on its associated mesh.
+ */
+class GridFunctionInterpCoefficient : public Coefficient
+{
+private:
+   const GridFunction *gf;
+public:
+   GridFunctionInterpCoefficient(const GridFunction *gf_) : gf(gf_) {}
+   virtual real_t Eval(ElementTransformation &T, const IntegrationPoint &ip)
+   {
+      Mesh *mesh = gf->FESpace()->GetMesh();
+      Vector x(T.GetSpaceDim());
+      T.Transform(ip, x);
+
+      Array<int> elem_ids(1);
+      Array<IntegrationPoint> ips(1);
+      DenseMatrix point_mat(x.Size(), 1);
+      for (int i=0; i<x.Size(); i++) { point_mat(i,0) = x(i); }
+
+      mesh->FindPoints(point_mat, elem_ids, ips);
+
+      if (elem_ids[0] >= 0)
+      {
+         return gf->GetValue(elem_ids[0], ips[0]);
+      }
+      return 0.0;
+   }
+};
 
 bool fileExists(const std::string& filename) {
     return fs::exists(filename);
@@ -73,10 +105,14 @@ int main(int argc, char *argv[])
    // Mesh and discretization parameters
    const char *mesh_file = "../../mfem/data/inline-quad.mesh";
    const char *ref_file  = "";
+   const char *ref_mesh_file = "";
+   const char *ref_sol_file = "";
+   const char *save_mesh_file = "";
+   const char *save_sol_file = "";
    int order = 1;
    int ref_levels = 0;
    int plotter = 0;
-   
+
    args.AddOption(&mesh_file, "-m", "--mesh",
                   "Mesh file to use.");
    args.AddOption(&ref_file, "-rf", "--ref-file",
@@ -87,6 +123,10 @@ int main(int argc, char *argv[])
                   "Finite element order isoparametric space.");
    args.AddOption(&plotter, "-pl","--plot",
                   "Plot the dataset by using 1.");
+   args.AddOption(&ref_mesh_file, "-rm", "--ref-mesh", "Reference mesh file.");
+   args.AddOption(&ref_sol_file, "-rs", "--ref-solution", "Reference solution file.");
+   args.AddOption(&save_mesh_file, "-sm", "--save-mesh", "File to save the current mesh.");
+   args.AddOption(&save_sol_file, "-ss", "--save-solution", "File to save the current solution.");
 
    // Problem parameters
    Array<int> strong_bdr;
@@ -169,6 +209,12 @@ int main(int argc, char *argv[])
          mesh.UniformRefinement();
       }
       if (Mpi::Root()) { mesh.PrintInfo(); }
+   }
+
+   // Save current mesh for future reference (before partitioning and clearing)
+   if (strlen(save_mesh_file) > 0 && Mpi::Root())
+   {
+      mesh.Save(save_mesh_file);
    }
 
    // Partition mesh
@@ -316,6 +362,25 @@ int main(int argc, char *argv[])
    newton_solver.Mult(zero, xp);
    phi_gf.Distribute(xp);
 
+   // Load reference solution (if provided)
+   Mesh *ref_mesh = nullptr;
+   FiniteElementCollection *ref_fec = nullptr;
+   FiniteElementSpace *ref_fes = nullptr;
+   GridFunction *ref_gf = nullptr;
+   Coefficient *ref_coeff = &sol_phi;
+
+   if (strlen(ref_mesh_file) > 0 && strlen(ref_sol_file) > 0)
+   {
+      if (Mpi::Root()) { cout << "Loading reference mesh: " << ref_mesh_file << endl; }
+      ref_mesh = new Mesh(ref_mesh_file, 1, 1);
+
+      if (Mpi::Root()) { cout << "Loading reference solution: " << ref_sol_file << endl; }
+      std::ifstream in(ref_sol_file);
+      ref_gf = new GridFunction(ref_mesh, in);
+
+      ref_coeff = new GridFunctionInterpCoefficient(ref_gf);
+   }
+
    // Compute errors
    LibVectorCoefficient sol_grad(dim, lib_file, "grad_phi", false);
    if (sol_grad.Foundfunction())
@@ -327,8 +392,8 @@ int main(int argc, char *argv[])
          irs[i] = &(IntRules.Get(i, order_quad));
       }
 
-      double err_phi  = phi_gf.ComputeL2Error(sol_phi, irs);
-      double norm_phi = ComputeGlobalLpNorm(2., sol_phi, pmesh, irs);
+      double err_phi  = phi_gf.ComputeL2Error(*ref_coeff, irs);
+      double norm_phi = ComputeGlobalLpNorm(2., *ref_coeff, pmesh, irs);
       std::cout << "|| phi_h - phi_ex || / || phi_ex || = " << err_phi / norm_phi << "\n";
 
       err_phi  = phi_gf.ComputeGradError(&sol_grad, irs);
@@ -345,8 +410,8 @@ int main(int argc, char *argv[])
          irs[i] = &(IntRules.Get(i, order_quad));
       }
 
-      double err_phi  = phi_gf.ComputeL2Error(sol_phi, irs);
-      double norm_phi = ComputeGlobalLpNorm(2., sol_phi, pmesh, irs);
+      double err_phi  = phi_gf.ComputeL2Error(*ref_coeff, irs);
+      double norm_phi = ComputeGlobalLpNorm(2., *ref_coeff, pmesh, irs);
       double final_error = err_phi/norm_phi;
       double h = integrator.GetMinH();
       std::cout << "|| phi_h - phi_ex || / || phi_ex || = " << err_phi / norm_phi << "\n";
@@ -377,10 +442,20 @@ int main(int argc, char *argv[])
 
    // Write solution
    phi_igf.ProjectCoefficient(phi_gf_cf);
-   err_igf.ProjectCoefficient(sol_phi);
+   err_igf.ProjectCoefficient(*ref_coeff);
    err_igf -= phi_igf;
+   for (int i = 0; i < err_igf.Size(); i++)
+   {
+      err_igf(i) = std::abs(err_igf(i));
+   }
    vdc.SetCycle(1);
    vdc.Save();
+
+   // Save solution for future reference
+   if (strlen(save_sol_file) > 0)
+   {
+      phi_gf.SaveAsOne(save_sol_file);
+   }
 
    {
       char vishost[] = "localhost";
@@ -392,8 +467,17 @@ int main(int argc, char *argv[])
    }
 
    // Free the used memory.
+   if (ref_coeff != &sol_phi) { delete ref_coeff; }
+   delete ref_gf;
+   delete ref_fes;
+   delete ref_fec;
+   delete ref_mesh;
+
    delete fec;
    delete space;
+   delete ifec;
+   delete ispace;
+   delete ilu_mom;
 
    return 0;
 }
