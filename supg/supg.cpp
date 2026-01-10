@@ -35,27 +35,94 @@ namespace fs = std::filesystem;
 /**
  * Coefficient class for mesh-agnostic interpolation of a GridFunction.
  *
- * Allows evaluating a GridFunction at arbitrary physical coordinates
- * by using the `Mesh::FindPoints` method on its associated mesh.
+ * This class allows evaluating a GridFunction at arbitrary physical coordinates
+ * by using an mfem::KDTree for spatial acceleration. It first finds the
+ * element with the closest center and then checks its neighborhood.
  */
 class GridFunctionInterpCoefficient : public Coefficient
 {
 private:
    const GridFunction *gf;
+   KDTreeBase<int, real_t> *kdtree;
+   Table *vtoel;
+   mutable InverseElementTransformation inv_tr;
+
 public:
-   GridFunctionInterpCoefficient(const GridFunction *gf_) : gf(gf_) {}
+   GridFunctionInterpCoefficient(const GridFunction *gf_)
+      : gf(gf_), kdtree(nullptr), vtoel(nullptr)
+   {
+      Mesh *mesh = gf->FESpace()->GetMesh();
+      int sdim = mesh->SpaceDimension();
+      if (sdim == 1) kdtree = new KDTree1D();
+      else if (sdim == 2) kdtree = new KDTree2D();
+      else if (sdim == 3) kdtree = new KDTree3D();
+
+      if (kdtree)
+      {
+         Vector center(sdim);
+         for (int i = 0; i < mesh->GetNE(); i++)
+         {
+            mesh->GetElementTransformation(i)->Transform(
+               Geometries.GetCenter(mesh->GetElementBaseGeometry(i)), center);
+            kdtree->AddPoint(center.GetData(), i);
+         }
+         kdtree->Sort();
+      }
+      vtoel = mesh->GetVertexToElementTable();
+   }
+
+   virtual ~GridFunctionInterpCoefficient()
+   {
+      delete kdtree;
+      delete vtoel;
+   }
+
    virtual real_t Eval(ElementTransformation &T, const IntegrationPoint &ip)
    {
       Mesh *mesh = gf->FESpace()->GetMesh();
-      Vector x(T.GetSpaceDim());
+      int sdim = mesh->SpaceDimension();
+      Vector x(sdim);
       T.Transform(ip, x);
 
+      IntegrationPoint ip_ref;
+      if (kdtree && mesh->GetNE() > 0)
+      {
+         int closest_el = kdtree->FindClosestPoint(x.GetData());
+         inv_tr.SetTransformation(*mesh->GetElementTransformation(closest_el));
+         if (inv_tr.Transform(x, ip_ref) == InverseElementTransformation::Inside)
+         {
+            return gf->GetValue(closest_el, ip_ref);
+         }
+
+         if (vtoel)
+         {
+            Array<int> vertices;
+            mesh->GetElementVertices(closest_el, vertices);
+            for (int i = 0; i < vertices.Size(); i++)
+            {
+               int v = vertices[i];
+               int ne = vtoel->RowSize(v);
+               const int *els = vtoel->GetRow(v);
+               for (int j = 0; j < ne; j++)
+               {
+                  int el = els[j];
+                  if (el == closest_el) continue;
+                  inv_tr.SetTransformation(*mesh->GetElementTransformation(el));
+                  if (inv_tr.Transform(x, ip_ref) == InverseElementTransformation::Inside)
+                  {
+                     return gf->GetValue(el, ip_ref);
+                  }
+               }
+            }
+         }
+      }
+
+      // Fallback for robustness
       Array<int> elem_ids(1);
       Array<IntegrationPoint> ips(1);
-      DenseMatrix point_mat(x.Size(), 1);
-      for (int i=0; i<x.Size(); i++) { point_mat(i,0) = x(i); }
-
-      mesh->FindPoints(point_mat, elem_ids, ips);
+      DenseMatrix point_mat(sdim, 1);
+      for (int i=0; i<sdim; i++) { point_mat(i,0) = x(i); }
+      mesh->FindPoints(point_mat, elem_ids, ips, false);
 
       if (elem_ids[0] >= 0)
       {
@@ -413,29 +480,34 @@ int main(int argc, char *argv[])
       double err_phi  = phi_gf.ComputeL2Error(*ref_coeff, irs);
       double norm_phi = ComputeGlobalLpNorm(2., *ref_coeff, pmesh, irs);
       double final_error = err_phi/norm_phi;
-      double h = integrator.GetMinH();
-      std::cout << "|| phi_h - phi_ex || / || phi_ex || = " << err_phi / norm_phi << "\n";
+      double h_local = integrator.GetMinH();
+      double h;
+      MPI_Reduce(&h_local, &h, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 
-      std::string filename = "plot.csv";
-      if (fileExists(filename)) {
-         std::ofstream outfile("plot.csv", std::ios::app);
-         if (outfile.is_open()) {
-            outfile << h << ',' << final_error;
-            outfile << "\n";
-            outfile.close();
-         } 
-         else {
-            std::cerr << "Unable to open file for appending.\n";
+      if (Mpi::Root())
+      {
+         std::cout << "|| phi_h - phi_ex || / || phi_ex || = " << final_error << "\n";
+         std::string filename = "plot.csv";
+         if (fileExists(filename)) {
+            std::ofstream outfile("plot.csv", std::ios::app);
+            if (outfile.is_open()) {
+               outfile << h << ',' << final_error;
+               outfile << "\n";
+               outfile.close();
+            }
+            else {
+               std::cerr << "Unable to open file for appending.\n";
+            }
          }
-      } 
-      else {
-         std::ofstream file("plot.csv");
-         if (file.is_open()) {
-            file << 'h' << ',' << "L2_error";
-            file << "\n";
-            file << h << ',' << final_error;
-            file << "\n";
-            file.close();
+         else {
+            std::ofstream file("plot.csv");
+            if (file.is_open()) {
+               file << 'h' << ',' << "L2_error";
+               file << "\n";
+               file << h << ',' << final_error;
+               file << "\n";
+               file.close();
+            }
          }
       }
    }
