@@ -12,22 +12,37 @@ def main():
 
     h = np.array(data.h)
     L2 = np.array(data.L2_error)
+    H1 = np.array(data.H1_error)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    fig,ax = plt.subplots(2, 2, figsize=(12, 10))
 
     # Linear scale plot
-    ax1.plot(h, L2, 'o-')
-    ax1.set_title("L2-error versus h")
-    ax1.set_xlabel("h")
-    ax1.set_ylabel("L2 error")
-    ax1.grid(True)
+    ax[0,0].plot(h, L2, 'o-')
+    ax[0,0].set_title("L2-error versus h")
+    ax[0,0].set_xlabel("h")
+    ax[0,0].set_ylabel("L2 error")
+    ax[0,0].grid(True)
 
     # Log-log scale plot
-    ax2.loglog(h, L2, 'o-')
-    ax2.set_title("L2-error versus h (log-log)")
-    ax2.set_xlabel("h")
-    ax2.set_ylabel("L2 error")
-    ax2.grid(True, which="both", ls="-")
+    ax[0,1].loglog(h, L2, 'o-')
+    ax[0,1].set_title("L2-error versus h (log-log)")
+    ax[0,1].set_xlabel("h")
+    ax[0,1].set_ylabel("L2 error")
+    ax[0,1].grid(True, which="both", ls="-")
+
+    # Linear scale plot
+    ax[1,0].plot(h, H1, 'o-')
+    ax[1,0].set_title("H1-error versus h")
+    ax[1,0].set_xlabel("h")
+    ax[1,0].set_ylabel("H1 error")
+    ax[1,0].grid(True)
+
+    # Log-log scale plot
+    ax[1,1].loglog(h, H1, 'o-')
+    ax[1,1].set_title("H1-error versus h (log-log)")
+    ax[1,1].set_xlabel("h")
+    ax[1,1].set_ylabel("H1 error")
+    ax[1,1].grid(True, which="both", ls="-")
 
     plt.tight_layout()
     plt.savefig("L2graph.png")
