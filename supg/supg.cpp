@@ -448,26 +448,6 @@ int main(int argc, char *argv[])
       ref_coeff = new GridFunctionInterpCoefficient(ref_gf);
    }
 
-   // Compute errors
-   LibVectorCoefficient sol_grad(dim, lib_file, "grad_phi", false);
-   if (sol_grad.Foundfunction())
-   {
-      int order_quad = max(2, 2*order+1);
-      const IntegrationRule *irs[Geometry::NumGeom];
-      for (int i=0; i < Geometry::NumGeom; ++i)
-      {
-         irs[i] = &(IntRules.Get(i, order_quad));
-      }
-
-      double err_phi  = phi_gf.ComputeL2Error(*ref_coeff, irs);
-      double norm_phi = ComputeGlobalLpNorm(2., *ref_coeff, pmesh, irs);
-      std::cout << "|| phi_h - phi_ex || / || phi_ex || = " << err_phi / norm_phi << "\n";
-
-      err_phi  = phi_gf.ComputeGradError(&sol_grad, irs);
-      norm_phi =  ComputeGlobalLpNorm(2., sol_grad, pmesh, irs);
-      std::cout << "||grad phi_h - grad phi_ex || / || grad phi_ex || = " << err_phi / norm_phi << "\n";
-   }
-
    if (plotter==1)
    {
       int order_quad = max(2, 2*order+1);
@@ -477,22 +457,27 @@ int main(int argc, char *argv[])
          irs[i] = &(IntRules.Get(i, order_quad));
       }
 
-      double err_phi  = phi_gf.ComputeL2Error(*ref_coeff, irs);
+
+      double l2_err_phi  = phi_gf.ComputeL2Error(*ref_coeff, irs);
       double norm_phi = ComputeGlobalLpNorm(2., *ref_coeff, pmesh, irs);
-      double final_error = err_phi/norm_phi;
+      double l2_err_norm = l2_err_phi/norm_phi;
+
+      GradientGridFunctionCoefficient exgrad(&phi_gf);
+      double h1_err_phi = phi_gf.ComputeH1Error(ref_coeff, &exgrad, irs);
+
       double h_local = integrator.GetMinH();
       double h;
       MPI_Reduce(&h_local, &h, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 
       if (Mpi::Root())
       {
-         std::cout << "|| phi_h - phi_ex || / || phi_ex || = " << final_error << "\n";
+         std::cout << "L2 error: || phi_h - phi_ex || / || phi_ex || = " << l2_err_norm << "\n";
+         std::cout << "H1 error: sqrt(norm_u^2+norm_du^2) = " << h1_err_phi << "\n";
          std::string filename = "plot.csv";
          if (fileExists(filename)) {
             std::ofstream outfile("plot.csv", std::ios::app);
             if (outfile.is_open()) {
-               outfile << h << ',' << final_error;
-               outfile << "\n";
+               outfile << h << ',' << l2_err_norm << ',' << h1_err_phi << "\n";
                outfile.close();
             }
             else {
@@ -502,10 +487,8 @@ int main(int argc, char *argv[])
          else {
             std::ofstream file("plot.csv");
             if (file.is_open()) {
-               file << 'h' << ',' << "L2_error";
-               file << "\n";
-               file << h << ',' << final_error;
-               file << "\n";
+               file << 'h' << ',' << "L2_error" << ',' << "H1_error" << "\n";
+               file << h << ',' << l2_err_norm << ',' << h1_err_phi << "\n";
                file.close();
             }
          }
