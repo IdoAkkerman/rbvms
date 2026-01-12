@@ -3,14 +3,28 @@
 //
 // RBVMS is free software; you can redistribute it and/or modify it under the
 // terms of the BSD-3 license.
-//------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// SUPG integrator with r-switch (smooth-min) MATRIX-BASED stabilization parameter
+// Steady-state convection–diffusion with discontinuity-capturing diffusion.
+//
+// τ is metric-based via G = J^{-T} J^{-1}:
+//
+//   tau_adv  = 1 / sqrt( a^T G a )
+//   tau_diff = 1 / ( C_d * k * sqrt(G:G) )
+//
+//   tau = ( tau_adv^{-r} + tau_diff^{-r} )^{-1/r}    (r=2 typical)
+//
+// -----------------------------------------------------------------------------
 
 #include "integrator.hpp"
+
+#include <algorithm>
+#include <cmath>
 
 using namespace mfem;
 
 // -----------------------------------------------------------------------------
-// Integration rule
+// Integration rule based on FE order
 // -----------------------------------------------------------------------------
 const IntegrationRule &StabConvDifIntegrator::GetRule(
    const FiniteElement &trial_fe,
@@ -22,40 +36,59 @@ const IntegrationRule &StabConvDifIntegrator::GetRule(
 }
 
 // -----------------------------------------------------------------------------
-// MATRIX–TENSOR SUPG STABILIZATION PARAMETER
-//
-//   τ^{-2} = a^T G a + C_I^2 * k^2 * (G : G)
-//   or τ = ( aᵀ G a + C_I² k² (G : G) )^{-1/2}
-//   G = J^{-T} J^{-1}
+// r-switch MATRIX-BASED SUPG stabilization parameter (steady-state)
 // -----------------------------------------------------------------------------
 real_t StabConvDifIntegrator::GetTau(real_t &k, Vector &a, DenseMatrix &Gij)
 {
-   const double CI = 1.0 / 12.0;
+   // Diffusion scaling constant (often same order as CI=1/12 used in baseline tau)
+   const double Cd  = 1.0 / 12.0;
+
+   // r-switch exponent (r=2 is a common smooth-min choice)
+   const double r   = 2.0;
+
+   // Numerical safety
+   const double eps = 1e-14;
+
    const int dim = Gij.Width();
 
-   double tau_conv = 0.0; // a^T G a
-   double tau_diff = 0.0; // G : G
+   // Compute:
+   //   aGa   = a^T G a
+   //   Gfro2 = G:G = sum_ij G_ij^2  (squared Frobenius norm)
+   double aGa   = 0.0;
+   double Gfro2 = 0.0;
 
    for (int i = 0; i < dim; i++)
    {
       for (int j = 0; j < dim; j++)
       {
          const double gij = Gij(i, j);
-         tau_conv += gij * a[i] * a[j];
-         tau_diff += gij * gij;
+         aGa   += gij * a[i] * a[j];
+         Gfro2 += gij * gij;
       }
    }
 
-   double denom = tau_conv + (CI * CI) * k * k * tau_diff;
+   aGa   = std::max(aGa, eps);
+   Gfro2 = std::max(Gfro2, eps);
 
-   // Numerical safety
-   if (denom < 1e-14) { denom = 1e-14; }
+   // Ensure nonnegative diffusion coefficient
+   const double kk = std::max((double)k, 0.0);
 
-   return 1.0 / sqrt(denom);
+   // Characteristic timescales
+   const double tau_adv  = 1.0 / std::sqrt(aGa);
+   const double tau_diff = 1.0 / (Cd * kk * std::sqrt(Gfro2) + eps);
+
+   // r-switch blend: tau = (tau_adv^{-r} + tau_diff^{-r})^{-1/r}
+   const double inv_tau_adv_r  = std::pow(1.0 / std::max(tau_adv,  eps), r);
+   const double inv_tau_diff_r = std::pow(1.0 / std::max(tau_diff, eps), r);
+
+   double inv_tau_r = inv_tau_adv_r + inv_tau_diff_r;
+   inv_tau_r = std::max(inv_tau_r, eps);
+
+   return (real_t) std::pow(inv_tau_r, -1.0 / r);
 }
 
 // -----------------------------------------------------------------------------
-// Discontinuity-capturing diffusion (unchanged)
+// Discontinuity-capturing diffusion (unchanged from your baseline)
 // -----------------------------------------------------------------------------
 real_t StabConvDifIntegrator::GetKdc(Vector &a,
                                     real_t &res,
@@ -133,16 +166,16 @@ void StabConvDifIntegrator::AssembleElementVector(const FiniteElement &el,
       mu = mu_cf->Eval(Trans, ip);
       f  = force_cf->Eval(Trans, ip);
 
-      // Galerkin convection
+      // Galerkin convection term
       res = a * dphidx - f;
       elvect.Add(w * res, shape);
 
-      // Diffusion (Galerkin + artificial)
+      // Diffusion (Galerkin + artificial/DC)
       res = a * dphidx - mu * dphidx2 - f;
       dshape.Mult(dphidx, test);
       elvect.Add(w * (GetKdc(a, res, dphidx, Gij) + mu), test);
 
-      // Stabilized test function
+      // Stabilized test function: (a·∇v + type*mu*Δv)
       dshape.Mult(a, test);
       test.Add((int)type * mu, lshape);
 
@@ -184,7 +217,7 @@ void StabConvDifIntegrator::AssembleElementGrad(const FiniteElement &el,
       Trans.SetIntPoint(&ip);
       w = Trans.Weight() * ip.weight;
 
-      // Metric tensor
+      // Metric tensor G = J^{-T} J^{-1}
       MultAtB(Trans.InverseJacobian(),
               Trans.InverseJacobian(),
               Gij);
@@ -204,24 +237,24 @@ void StabConvDifIntegrator::AssembleElementGrad(const FiniteElement &el,
       mu = mu_cf->Eval(Trans, ip);
       f  = force_cf->Eval(Trans, ip);
 
-      // Galerkin convection
+      // Galerkin convection contribution
       dshape.Mult(a, trail);
       AddMult_a_VWt(w, shape, trail, elmat);
 
-      // Diffusion
+      // Diffusion (Galerkin + artificial/DC)
       res = a * dphidx - mu * dphidx2 - f;
       AddMult_a_AAt(w * (GetKdc(a, res, dphidx, Gij) + mu),
                     dshape, elmat);
 
-      // Stabilized test & trial
+      // Stabilized test function
       dshape.Mult(a, test);
       test.Add((int)type * mu, lshape);
 
+      // Stabilized trial function
       dshape.Mult(a, trail);
       trail.Add(-mu, lshape);
 
       // SUPG Jacobian contribution
-      AddMult_a_VWt(w * GetTau(mu, a, Gij),
-                    test, trail, elmat);
+      AddMult_a_VWt(w * GetTau(mu, a, Gij), test, trail, elmat);
    }
 }
