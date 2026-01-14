@@ -13,6 +13,10 @@
 #define ADVEC_ANGLE 30
 #endif
 
+#ifndef MU
+#define MU 0.0001
+#endif
+
 double sol_phi(double *coord, int dim, double time)
 {
    if (coord[0]+coord[1]<1)
@@ -33,6 +37,6 @@ double force(double *coord, int dim, double time)
 
 double mu(double *coord, int dim, double time)
 {
-   return 0.0001;
+   return MU;
 }
 

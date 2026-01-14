@@ -9,6 +9,9 @@
 #include <math.h>
 #include <stdio.h>
 
+#ifndef MU
+#define MU 0.00001
+#endif
 
 double sol_phi(double *coord, int dim, double time)
 {
@@ -30,6 +33,6 @@ double force(double *coord, int dim, double time)
 
 double mu(double *coord, int dim, double time)
 {
-   return 0.00001;
+   return MU;
 }
 

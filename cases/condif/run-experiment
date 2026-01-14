@@ -12,7 +12,10 @@ set -e # Exit on error
 ref_level=10
 sweep="1 2 3 4 5"
 clean_ref=false
-exe="../../build6/supg/supg"
+exe="../../build/supg/supg"
+
+adv_angle=45
+mu=0.0001
 
 # Argument parsing
 while [[ $# -gt 0 ]]; do
@@ -33,16 +36,23 @@ while [[ $# -gt 0 ]]; do
       exe="$2"
       shift 2
       ;;
+    --adv-angle)
+      adv_angle="$2"
+      shift 2
+      ;;
+    --mu)
+      mu="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown option: $1"
       exit 1
       ;;
   esac
 done
-
 # Compile case library
 echo "Compiling case library..."
-gcc -shared -o libfun.so -fPIC condif.c
+gcc -shared -o libfun.so -fPIC -DADVEC_ANGLE=$adv_angle -DMU=$mu condif.c
 
 
 if [ -z "$exe" ] || [ ! -f "$exe" ]; then
