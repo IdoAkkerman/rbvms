@@ -12,7 +12,7 @@ set -e # Exit on error
 ref_level=10
 sweep="1 2 3 4 5"
 clean_ref=false
-exe="../../build/supg/supg"
+exe="../../build6/supg/supg"
 
 # Argument parsing
 while [[ $# -gt 0 ]]; do
