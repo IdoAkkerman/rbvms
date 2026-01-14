@@ -2,30 +2,68 @@
 
 # Experiment orchestration script case
 # 1. Compiles case library
-# 2. Generates high-res reference (level 10) if not present
-# 3. Runs simulations for refinement levels 1 to 5
+# 2. Generates high-res reference if not present (or if --clean)
+# 3. Runs simulations for refinement sweep (--ref-level)
 # 4. Plots L2 error over h
 
 set -e # Exit on error
+
+# Default parameters
+ref_level=10
+sweep="1 2 3 4 5"
+clean_ref=false
+exe="../../build/supg/supg"
+
+# Argument parsing
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --clean)
+      clean_ref=true
+      shift
+      ;;
+    --ref-level)
+      ref_level="$2"
+      shift 2
+      ;;
+    --sweep)
+      sweep="$2"
+      shift 2
+      ;;
+    --exe)
+      exe="$2"
+      shift 2
+      ;;
+    *)
+      echo "Unknown option: $1"
+      exit 1
+      ;;
+  esac
+done
 
 # Compile case library
 echo "Compiling case library..."
 gcc -shared -o libfun.so -fPIC condif.c
 
-# Find supg executable
-if [ -f "../../build4/supg/supg" ]; then
-    exe=../../build4/supg/supg
-else
-    echo "Executable supg not found. Please build the project first."
+
+if [ -z "$exe" ] || [ ! -f "$exe" ]; then
+    echo "Executable supg not found. Please build the project first or provide it via --exe."
     exit 1
 fi
 
+echo "Using executable: $exe"
+
 mesh=square.mesh
 
-# 1. Reference Solution (Level 10)
+# 0. Clean reference if requested
+if [ "$clean_ref" = true ]; then
+    echo "Cleaning up reference files..."
+    rm -f ref.mesh ref.sol
+fi
+
+# 1. Reference Solution (Level $ref_level)
 if [ ! -f "ref.mesh" ] || [ ! -f "ref.sol" ]; then
-    echo "Generating level 10 reference solution..."
-    mpirun -n 1 $exe -m $mesh -o 2 -r 10 --strong-bdr "1 2 3 4" -l ./libfun.so \
+    echo "Generating level $ref_level reference solution..."
+    mpirun -n 1 $exe -m $mesh -o 2 -r $ref_level --strong-bdr "1 2 3 4" -l ./libfun.so \
         --save-mesh ref.mesh --save-solution ref.sol
 else
     echo "Using existing reference solution (ref.mesh/ref.sol)."
@@ -34,10 +72,10 @@ fi
 # 2. Initialization
 echo "Cleaning up old visualizations..."
 rm -f plot.csv
-rm -rf solution_r1 solution_r2 solution_r3 solution_r4 solution_r5
+rm -rf solution_r*
 
-# 3. Refinement Sweep (Levels 1 to 5)
-for r in 1 2 3 4 5 6 7 8 9
+# 3. Refinement Sweep
+for r in $sweep
 do
     echo "--- Level $r refinement ---"
     mpirun -n 1 $exe -m $mesh -o 2 -r $r --strong-bdr "1 2 3 4" -l ./libfun.so \
@@ -57,4 +95,4 @@ fi
 echo "Experiment complete!"
 echo "- CSV data: plot.csv"
 echo "- Plot: L2graph.png"
-echo "- VisIt data: solution_r[1-5]/"
+echo "- VisIt data: solution_r[$(echo $sweep | sed 's/ /|/g')]/"
