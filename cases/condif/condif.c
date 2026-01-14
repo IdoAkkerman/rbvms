@@ -9,6 +9,9 @@
 #include <math.h>
 #include <stdio.h>
 
+#ifndef ADVEC_ANGLE
+#define ADVEC_ANGLE 45
+#endif
 
 double sol_phi(double *coord, int dim, double time)
 {
@@ -17,8 +20,8 @@ double sol_phi(double *coord, int dim, double time)
 
 void advection(double *coord, int dim, double time, double *adv, int vdim)
 {
-   adv[0] = sqrt(2.0)/2.0;
-   adv[1] = sqrt(2.0)/2.0;
+   adv[0] = cos(ADVEC_ANGLE*(M_PI/180));
+   adv[1] = sin(ADVEC_ANGLE*(M_PI/180));
 }
 
 double force(double *coord, int dim, double time)
