@@ -4,7 +4,7 @@ TODO
 */buildInfo.hpp
 
 # Build directories
-build/*
+build*/*
 debug/*
 dbg/*
 opt/*
@@ -15,7 +15,11 @@ bin/*
 cases/*/log*
 cases/*/output_*.dat
 cases/*/restart
-cases/*/solution
+cases/*/sol*
+cases/*/plot*
+cases/*/ref*
+cases/*/visit*
+cases/*/*.png
 cases/*/gprof*
 cases/*/*.msh
 cases/*/*.bak
