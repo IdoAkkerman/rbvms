@@ -602,7 +602,7 @@ int main(int argc, char *argv[])
 
       // Write solution
       phi_igf.ProjectCoefficient(phi_gf_cf);
-      err_igf.ProjectCoefficient(sol_phi);
+      err_igf.ProjectCoefficient(*ref_coeff);
       err_igf -= phi_igf;
       for (int i = 0; i < err_igf.Size(); i++)
       {
