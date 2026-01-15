@@ -54,6 +54,9 @@ private:
    Vector a, dphidx, shape, lshape, trail, test;
    DenseMatrix dshape, Gij;
 
+   real_t min_h = infinity();
+   real_t max_h = -min_h;
+
 public:
    /// Constructor
    StabConvDifIntegrator(VectorCoefficient &a,
@@ -74,7 +77,10 @@ public:
    void SetVMS(){ type = StabilizeType::VMS; };
 
    /// Destructor
-   ~StabConvDifIntegrator() {};
+   ~StabConvDifIntegrator() {
+     printf("min_h = %f\n", min_h);
+     printf("max_h = %f\n", max_h);
+   };
 
    /// Set the penalty parameter for pinning the zero level-set
    void SetInconsistentDC(real_t k0) { kdc0 = k0; };
@@ -98,6 +104,9 @@ public:
    static const IntegrationRule &GetRule(const FiniteElement &trial_fe,
                                          const FiniteElement &test_fe,
                                          ElementTransformation &Trans);
+
+   real_t GetMinH();
+   real_t GetMaxH();
 };
 
 #endif

@@ -19,11 +19,122 @@
 
 #include "integrator.hpp"
 
+#include <fstream>
+#include <iostream>
+#include <filesystem>
+#include <vector>
+#include <string>
+
 using namespace std;
 using namespace mfem;
 
 extern void printInfo();
 extern void line(int len);
+
+namespace fs = std::filesystem;
+/**
+ * Coefficient class for mesh-agnostic interpolation of a GridFunction.
+ *
+ * This class allows evaluating a GridFunction at arbitrary physical coordinates
+ * by using an mfem::KDTree for spatial acceleration. It first finds the
+ * element with the closest center and then checks its neighborhood.
+ */
+class GridFunctionInterpCoefficient : public Coefficient
+{
+private:
+   const GridFunction *gf;
+   KDTreeBase<int, real_t> *kdtree;
+   Table *vtoel;
+   mutable InverseElementTransformation inv_tr;
+
+public:
+   GridFunctionInterpCoefficient(const GridFunction *gf_)
+      : gf(gf_), kdtree(nullptr), vtoel(nullptr)
+   {
+      Mesh *mesh = gf->FESpace()->GetMesh();
+      int sdim = mesh->SpaceDimension();
+      if (sdim == 1) kdtree = new KDTree1D();
+      else if (sdim == 2) kdtree = new KDTree2D();
+      else if (sdim == 3) kdtree = new KDTree3D();
+
+      if (kdtree)
+      {
+         Vector center(sdim);
+         for (int i = 0; i < mesh->GetNE(); i++)
+         {
+            mesh->GetElementTransformation(i)->Transform(
+               Geometries.GetCenter(mesh->GetElementBaseGeometry(i)), center);
+            kdtree->AddPoint(center.GetData(), i);
+         }
+         kdtree->Sort();
+      }
+      vtoel = mesh->GetVertexToElementTable();
+   }
+
+   virtual ~GridFunctionInterpCoefficient()
+   {
+      delete kdtree;
+      delete vtoel;
+   }
+
+   virtual real_t Eval(ElementTransformation &T, const IntegrationPoint &ip)
+   {
+      Mesh *mesh = gf->FESpace()->GetMesh();
+      int sdim = mesh->SpaceDimension();
+      Vector x(sdim);
+      T.Transform(ip, x);
+
+      IntegrationPoint ip_ref;
+      if (kdtree && mesh->GetNE() > 0)
+      {
+         int closest_el = kdtree->FindClosestPoint(x.GetData());
+         inv_tr.SetTransformation(*mesh->GetElementTransformation(closest_el));
+         if (inv_tr.Transform(x, ip_ref) == InverseElementTransformation::Inside)
+         {
+            return gf->GetValue(closest_el, ip_ref);
+         }
+
+         if (vtoel)
+         {
+            Array<int> vertices;
+            mesh->GetElementVertices(closest_el, vertices);
+            for (int i = 0; i < vertices.Size(); i++)
+            {
+               int v = vertices[i];
+               int ne = vtoel->RowSize(v);
+               const int *els = vtoel->GetRow(v);
+               for (int j = 0; j < ne; j++)
+               {
+                  int el = els[j];
+                  if (el == closest_el) continue;
+                  inv_tr.SetTransformation(*mesh->GetElementTransformation(el));
+                  if (inv_tr.Transform(x, ip_ref) == InverseElementTransformation::Inside)
+                  {
+                     return gf->GetValue(el, ip_ref);
+                  }
+               }
+            }
+         }
+      }
+
+      // Fallback for robustness
+      Array<int> elem_ids(1);
+      Array<IntegrationPoint> ips(1);
+      DenseMatrix point_mat(sdim, 1);
+      for (int i=0; i<sdim; i++) { point_mat(i,0) = x(i); }
+      mesh->FindPoints(point_mat, elem_ids, ips, false);
+
+      if (elem_ids[0] >= 0)
+      {
+         return gf->GetValue(elem_ids[0], ips[0]);
+      }
+      return 0.0;
+   }
+};
+
+bool fileExists(const std::string& filename) {
+    return fs::exists(filename);
+}
 
 // Routine for checking duplicity of boundary conditions
 void CheckBoundaries(Array<bool> &bnd_flags,
@@ -61,8 +172,14 @@ int main(int argc, char *argv[])
    // Mesh and discretization parameters
    const char *mesh_file = "../../mfem/data/inline-quad.mesh";
    const char *ref_file  = "";
+   const char *ref_mesh_file = "";
+   const char *ref_sol_file = "";
+   const char *save_mesh_file = "";
+   const char *save_sol_file = "";
    int order = 1;
    int ref_levels = 0;
+   int plotter = 0;
+
    args.AddOption(&mesh_file, "-m", "--mesh",
                   "Mesh file to use.");
    args.AddOption(&ref_file, "-rf", "--ref-file",
@@ -71,6 +188,12 @@ int main(int argc, char *argv[])
                   "Number of times to refine the mesh.");
    args.AddOption(&order, "-o", "--order",
                   "Finite element order isoparametric space.");
+   args.AddOption(&plotter, "-pl","--plot",
+                  "Plot the dataset by using 1.");
+   args.AddOption(&ref_mesh_file, "-rm", "--ref-mesh", "Reference mesh file.");
+   args.AddOption(&ref_sol_file, "-rs", "--ref-solution", "Reference solution file.");
+   args.AddOption(&save_mesh_file, "-sm", "--save-mesh", "File to save the current mesh.");
+   args.AddOption(&save_sol_file, "-ss", "--save-solution", "File to save the current solution.");
 
    // Problem parameters
    Array<int> strong_bdr;
@@ -155,6 +278,12 @@ int main(int argc, char *argv[])
       if (Mpi::Root()) { mesh.PrintInfo(); }
    }
 
+   // Save current mesh for future reference (before partitioning and clearing)
+   if (strlen(save_mesh_file) > 0 && Mpi::Root())
+   {
+      mesh.Save(save_mesh_file);
+   }
+
    // Partition mesh
    ParMesh pmesh(MPI_COMM_WORLD, mesh);
    mesh.Clear();
@@ -237,11 +366,14 @@ int main(int argc, char *argv[])
    ParFiniteElementSpace* ispace;
    ispace = new ParFiniteElementSpace(&pmesh, ifec);
    ParGridFunction phi_igf(ispace);
+   ParGridFunction err_igf(ispace);
    GridFunctionCoefficient phi_gf_cf(&phi_gf);
    phi_igf.ProjectCoefficient(phi_gf_cf);
+   err_igf = 0.0;
    VisItDataCollection vdc("step", &pmesh);
    vdc.SetPrefixPath(vis_dir);
    vdc.RegisterField("phi", &phi_igf);
+   vdc.RegisterField("error", &err_igf);
    vdc.SetCycle(0);
    vdc.Save();
 
@@ -294,9 +426,26 @@ int main(int argc, char *argv[])
    newton_solver.Mult(zero, xp);
    phi_gf.Distribute(xp);
 
-   // Compute errors
-   LibVectorCoefficient sol_grad(dim, lib_file, "grad_phi", false);
-   if (sol_grad.Foundfunction())
+   // Load reference solution (if provided)
+   Mesh *ref_mesh = nullptr;
+   FiniteElementCollection *ref_fec = nullptr;
+   FiniteElementSpace *ref_fes = nullptr;
+   GridFunction *ref_gf = nullptr;
+   Coefficient *ref_coeff = &sol_phi;
+
+   if (strlen(ref_mesh_file) > 0 && strlen(ref_sol_file) > 0)
+   {
+      if (Mpi::Root()) { cout << "Loading reference mesh: " << ref_mesh_file << endl; }
+      ref_mesh = new Mesh(ref_mesh_file, 1, 1);
+
+      if (Mpi::Root()) { cout << "Loading reference solution: " << ref_sol_file << endl; }
+      std::ifstream in(ref_sol_file);
+      ref_gf = new GridFunction(ref_mesh, in);
+
+      ref_coeff = new GridFunctionInterpCoefficient(ref_gf);
+   }
+
+   if (plotter==1)
    {
       int order_quad = max(2, 2*order+1);
       const IntegrationRule *irs[Geometry::NumGeom];
@@ -305,19 +454,60 @@ int main(int argc, char *argv[])
          irs[i] = &(IntRules.Get(i, order_quad));
       }
 
-      double err_phi  = phi_gf.ComputeL2Error(sol_phi, irs);
-      double norm_phi = ComputeGlobalLpNorm(2., sol_phi, pmesh, irs);
-      std::cout << "|| phi_h - phi_ex || / || phi_ex || = " << err_phi / norm_phi << "\n";
 
-      err_phi  = phi_gf.ComputeGradError(&sol_grad, irs);
-      norm_phi =  ComputeGlobalLpNorm(2., sol_grad, pmesh, irs);
-      std::cout << "||grad phi_h - grad phi_ex || / || grad phi_ex || = " << err_phi / norm_phi << "\n";
+      double l2_err_phi  = phi_gf.ComputeL2Error(*ref_coeff, irs);
+      double norm_phi = ComputeGlobalLpNorm(2., *ref_coeff, pmesh, irs);
+      double l2_err_norm = l2_err_phi/norm_phi;
+
+      GradientGridFunctionCoefficient exgrad(&phi_gf);
+      double h1_err_phi = phi_gf.ComputeH1Error(ref_coeff, &exgrad, irs);
+
+      double h_local = integrator.GetMinH();
+      double h;
+      MPI_Reduce(&h_local, &h, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+
+      if (Mpi::Root())
+      {
+         std::cout << "L2 error: || phi_h - phi_ex || / || phi_ex || = " << l2_err_norm << "\n";
+         std::cout << "H1 error: sqrt(norm_u^2+norm_du^2) = " << h1_err_phi << "\n";
+         std::string filename = "plot.csv";
+         if (fileExists(filename)) {
+            std::ofstream outfile("plot.csv", std::ios::app);
+            if (outfile.is_open()) {
+               outfile << h << ',' << l2_err_norm << ',' << h1_err_phi << "\n";
+               outfile.close();
+            }
+            else {
+               std::cerr << "Unable to open file for appending.\n";
+            }
+         }
+         else {
+            std::ofstream file("plot.csv");
+            if (file.is_open()) {
+               file << 'h' << ',' << "L2_error" << ',' << "H1_error" << "\n";
+               file << h << ',' << l2_err_norm << ',' << h1_err_phi << "\n";
+               file.close();
+            }
+         }
+      }
    }
 
    // Write solution
    phi_igf.ProjectCoefficient(phi_gf_cf);
+   err_igf.ProjectCoefficient(*ref_coeff);
+   err_igf -= phi_igf;
+   for (int i = 0; i < err_igf.Size(); i++)
+   {
+      err_igf(i) = std::abs(err_igf(i));
+   }
    vdc.SetCycle(1);
    vdc.Save();
+
+   // Save solution for future reference
+   if (strlen(save_sol_file) > 0)
+   {
+      phi_gf.SaveAsOne(save_sol_file);
+   }
 
    {
       char vishost[] = "localhost";
@@ -329,8 +519,17 @@ int main(int argc, char *argv[])
    }
 
    // Free the used memory.
+   if (ref_coeff != &sol_phi) { delete ref_coeff; }
+   delete ref_gf;
+   delete ref_fes;
+   delete ref_fec;
+   delete ref_mesh;
+
    delete fec;
    delete space;
+   delete ifec;
+   delete ispace;
+   delete ilu_mom;
 
    return 0;
 }

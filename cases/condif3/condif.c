@@ -9,11 +9,14 @@
 #include <math.h>
 #include <stdio.h>
 
+#ifndef MU
+#define MU 0.0
+#endif
 
 double sol_phi(double *coord, int dim, double time)
 {
    double r = sqrt(coord[0]*coord[0] + coord[1]*coord[1]);
-   
+
    return 0.5*(1.0 - cos(2*M_PI*fmin(1.0, r)));
 }
 
@@ -30,6 +33,6 @@ double force(double *coord, int dim, double time)
 
 double mu(double *coord, int dim, double time)
 {
-   return 0.0;
+   return MU;
 }
 

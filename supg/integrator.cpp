@@ -96,6 +96,10 @@ real_t StabConvDifIntegrator::GetKdc(Vector &a,
                                     DenseMatrix &Gij)
 {
    real_t h = 1.0 / sqrt(Gij.Trace() / Gij.Width());
+   if (h > max_h)
+     max_h = h;
+   if (h < min_h)
+     min_h = h;
    return kdc0 * h * a.Norml2()
         + kdc1 * h * fabs(res) / (dphidx.Norml2() + 1e-10);
 }
@@ -257,4 +261,13 @@ void StabConvDifIntegrator::AssembleElementGrad(const FiniteElement &el,
       // SUPG Jacobian contribution
       AddMult_a_VWt(w * GetTau(mu, a, Gij), test, trail, elmat);
    }
+}
+
+real_t StabConvDifIntegrator::GetMinH()
+{
+  return min_h;
+}
+real_t StabConvDifIntegrator::GetMaxH()
+{
+  return max_h;
 }
