@@ -1,0 +1,109 @@
+#!/bin/bash
+
+# Experiment orchestration script case
+# 1. Compiles case library
+# 2. Generates high-res reference if not present (or if --clean)
+# 3. Runs simulations for refinement sweep (--ref-level)
+# 4. Plots L2 error over h
+
+set -e # Exit on error
+
+# Default parameters
+ref_level=10
+sweep="1 2 3 4 5"
+clean_ref=false
+exe="../../build/supg/supg"
+
+adv_angle=30
+mu=0.0001
+
+# Argument parsing
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --clean)
+      clean_ref=true
+      shift
+      ;;
+    --ref-level)
+      ref_level="$2"
+      shift 2
+      ;;
+    --sweep)
+      sweep="$2"
+      shift 2
+      ;;
+    --exe)
+      exe="$2"
+      shift 2
+      ;;
+    --adv-angle)
+      adv_angle="$2"
+      shift 2
+      ;;
+    --mu)
+      mu="$2"
+      shift 2
+      ;;
+    *)
+      echo "Unknown option: $1"
+      exit 1
+      ;;
+  esac
+done
+
+# Compile case library
+echo "Compiling case library..."
+gcc -shared -o libfun.so -fPIC -DADVEC_ANGLE=$adv_angle -DMU=$mu condif.c
+
+
+if [ -z "$exe" ] || [ ! -f "$exe" ]; then
+    echo "Executable supg not found. Please build the project first or provide it via --exe."
+    exit 1
+fi
+
+echo "Using executable: $exe"
+
+mesh=square.mesh
+
+# 0. Clean reference if requested
+if [ "$clean_ref" = true ]; then
+    echo "Cleaning up reference files..."
+    rm -f ref.mesh ref.sol
+fi
+
+# 1. Reference Solution (Level $ref_level)
+if [ ! -f "ref.mesh" ] || [ ! -f "ref.sol" ]; then
+    echo "Generating level $ref_level reference solution..."
+    mpirun -n 1 $exe -m $mesh -o 2 -r $ref_level --strong-bdr "1 2 3 4" -l ./libfun.so \
+        --save-mesh ref.mesh --save-solution ref.sol
+else
+    echo "Using existing reference solution (ref.mesh/ref.sol)."
+fi
+
+# 2. Initialization
+echo "Cleaning up old visualizations..."
+rm -f plot.csv
+rm -rf solution_r*
+
+# 3. Refinement Sweep
+for r in $sweep
+do
+    echo "--- Level $r refinement ---"
+    mpirun -n 1 $exe -m $mesh -o 2 -r $r --strong-bdr "1 2 3 4" -l ./libfun.so \
+        --ref-mesh ref.mesh --ref-solution ref.sol \
+        -pl 1 -vd "solution_r$r"
+done
+
+# 4. Plotting L2 error over h
+if [ -f "plot.csv" ]; then
+    echo "Generating error plot..."
+    python3 ../../util/CSV_reader_L2.py plot.csv
+else
+    echo "Error: plot.csv was not generated."
+    exit 1
+fi
+
+echo "Experiment complete!"
+echo "- CSV data: plot.csv"
+echo "- Plot: L2graph.png"
+echo "- VisIt data: solution_r[$(echo $sweep | sed 's/ /|/g')]/"
