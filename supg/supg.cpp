@@ -19,6 +19,7 @@
 
 #include "integrator.hpp"
 
+#include <fenv.h>
 #include <fstream>
 #include <iostream>
 #include <filesystem>
@@ -51,6 +52,7 @@ public:
    GridFunctionInterpCoefficient(const GridFunction *gf_)
       : gf(gf_), kdtree(nullptr), vtoel(nullptr)
    {
+      inv_tr.SetInitialGuessType(InverseElementTransformation::ClosestRefNode);
       Mesh *mesh = gf->FESpace()->GetMesh();
       int sdim = mesh->SpaceDimension();
       if (sdim == 1) kdtree = new KDTree1D();
@@ -83,6 +85,8 @@ public:
       int sdim = mesh->SpaceDimension();
       Vector x(sdim);
       T.Transform(ip, x);
+
+      if (x.Norml2() < 1e-12) return 0.0; // Robustness for singular origin in NURBS
 
       IntegrationPoint ip_ref;
       if (kdtree && mesh->GetNE() > 0)
@@ -164,6 +168,9 @@ int main(int argc, char *argv[])
    int num_procs = Mpi::WorldSize();
    int myid = Mpi::WorldRank();
    Hypre::Init();
+#ifdef __linux__
+   fedisableexcept(FE_DIVBYZERO);
+#endif
    printInfo();
 
    // Parse command-line options.
@@ -356,7 +363,7 @@ int main(int argc, char *argv[])
    // Define the gridfunction and solution vector
    ParGridFunction phi_gf(space);
    LibCoefficient sol_phi(lib_file, "sol_phi");
-   phi_gf.ProjectCoefficient(sol_phi, ProjectType::ELEMENT);
+   phi_gf.ProjectCoefficient(sol_phi);
    Vector xp;
    phi_gf.GetTrueDofs(xp);
 
