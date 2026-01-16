@@ -6,4 +6,4 @@ mesh=quart-circle.mesh
 
 rm output* log*
 
-mpirun -n 1 $exe -m $mesh -o 2 -r 3  --strong-bdr "1 2 3 4"   -l libfun.so | tee log0
+mpirun -n 1 $exe -m $mesh -o 2 -r 3  --strong-bdr "1 2 3" --weak-bdr "4"  -l libfun.so | tee log0
