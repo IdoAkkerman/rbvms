@@ -20,10 +20,8 @@ double sol_phi(double *coord, int dim, double time)
 
 void advection(double *coord, int dim, double time, double *adv, int vdim)
 {
-   double r = sqrt(coord[0]*coord[0] + coord[1]*coord[1]);
-
-   adv[0] = -coord[0]/r;//-sqrt(2.0)/2.0;
-   adv[1] = -coord[1]/r;//-sqrt(2.0)/2.0;
+   adv[0] = 0;
+   adv[1] = -1;
 }
 
 double force(double *coord, int dim, double time)
