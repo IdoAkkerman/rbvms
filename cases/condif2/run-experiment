@@ -69,7 +69,7 @@ fi
 # 1. Reference Solution (Level $ref_level)
 if [ ! -f "ref.mesh" ] || [ ! -f "ref.sol" ]; then
     echo "Generating level $ref_level reference solution..."
-    mpirun -n 1 $exe -m $mesh -o 2 -r $ref_level --strong-bdr "1 2 3 4" -l ./libfun.so \
+    mpirun -n 1 $exe -m $mesh -o 2 -r $ref_level --strong-bdr "1 2 3" --weak-bdr "4" -l ./libfun.so \
         --save-mesh ref.mesh --save-solution ref.sol
 else
     echo "Using existing reference solution (ref.mesh/ref.sol)."
@@ -84,7 +84,7 @@ rm -rf solution_r*
 for r in $sweep
 do
     echo "--- Level $r refinement ---"
-    mpirun -n 1 $exe -m $mesh -o 2 -r $r --strong-bdr "1 2 3 4" -l ./libfun.so \
+    mpirun -n 1 $exe -m $mesh -o 2 -r $r --strong-bdr "1 2 3" --weak-bdr "4" -l ./libfun.so \
         --ref-mesh ref.mesh --ref-solution ref.sol \
         -pl 1 -vd "solution_r$r"
 done
