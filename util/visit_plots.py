@@ -71,27 +71,36 @@ for d in solution_dirs:
         filename_only = os.path.basename(db_path)
         step_name = os.path.splitext(filename_only)[0]
 
+        # Skip step 0 (boundary conditions only)
+        if step_name.endswith("_000000"):
+            continue
+
         # Open the specific time step
         if OpenDatabase(db_path, 0):
             
-            # Construct base output name: plots/solution_r1_step_000000_phi
-            base_name_phi = f"{d}_{step_name}_phi"
-            full_path_phi = os.path.join(OUTPUT_DIR, base_name_phi)
+            if step_name.startswith("step_"):
+                # Plot phi
+                full_path_phi = os.path.join(OUTPUT_DIR, f"{d}_{step_name}_phi")
+                try:
+                    save_variable("phi", full_path_phi)
+                except Exception as e:
+                    print(f"Error plotting phi for {db_path}: {e}")
+
+                # Plot error (skip for reference solution)
+                if d != "solution":
+                    full_path_err = os.path.join(OUTPUT_DIR, f"{d}_{step_name}_error")
+                    try:
+                        save_variable("error", full_path_err)
+                    except Exception as e:
+                        print(f"Error plotting error for {db_path}: {e}")
             
-            base_name_err = f"{d}_{step_name}_error"
-            full_path_err = os.path.join(OUTPUT_DIR, base_name_err)
-
-            # Plot phi
-            try:
-                save_variable("phi", full_path_phi)
-            except Exception as e:
-                print(f"Error plotting phi for {db_path}: {e}")
-
-            # Plot error
-            try:
-                save_variable("error", full_path_err)
-            except Exception as e:
-                print(f"Error plotting error for {db_path}: {e}")
+            elif step_name.startswith("tau_"):
+                # Plot tau
+                full_path_tau = os.path.join(OUTPUT_DIR, f"{d}_{step_name}_tau")
+                try:
+                    save_variable("tau", full_path_tau)
+                except Exception as e:
+                    print(f"Error plotting tau for {db_path}: {e}")
 
             # Delete plots *before* closing the database
             DeleteAllPlots()
