@@ -4,7 +4,6 @@ import glob
 
 OUTPUT_DIR = "plots"
 RESOLUTION = (1024, 1024)
-# We will set the Multires resolution to 5 to ensure smoothness
 SMOOTHING_LEVEL = 5
 
 if not os.path.exists(OUTPUT_DIR):
@@ -32,28 +31,49 @@ s.family = 0
 SetSaveWindowAttributes(s)
 
 def save_variable(variable_name, output_path, ref_level):
-    """
-    Clears old plots, adds the new variable, applies Multires smoothing,
-    conditionally adds mesh, draws, and saves.
-    """
     DeleteAllPlots()
 
     # 1. Add the Pseudocolor plot
     AddPlot("Pseudocolor", variable_name)
+    DrawPlots() # Necessary to populate data for Queries
 
-    # 2. Apply Multires Control for smoothing
+    # 2. Statistical Outlier Detection
+    try:
+        Query("Mean")
+        mean = GetQueryResultValue()
+        Query("StdDev")
+        stddev = GetQueryResultValue()
+
+        lower_bound = mean - (3 * stddev)
+        upper_bound = mean + (3 * stddev)
+
+        if "tau" in variable_name:
+            lower_bound = max(0, lower_bound)
+
+        AddOperator("Threshold", 0)
+        t_atts = ThresholdAttributes()
+        t_atts.listedVarNames = (variable_name,)
+        t_atts.lowerBounds = (float(lower_bound),)
+        t_atts.upperBounds = (float(upper_bound),)
+        SetOperatorOptions(t_atts)
+
+        print(f"   [Stats] {variable_name}: Mu={mean:.2f}, Sigma={stddev:.2f}. Clipping to [{lower_bound:.2f}, {upper_bound:.2f}]")
+
+    except Exception as e:
+        print(f"   [Warning] Stats query failed for {variable_name}, using defaults: {e}")
+
+    # 3. Apply Multires Control (Smoothing)
     AddOperator("MultiresControl", 0)
     m_atts = MultiresControlAttributes()
     m_atts.resolution = SMOOTHING_LEVEL
     SetOperatorOptions(m_atts)
 
-    # 3. Conditionally Add Mesh Plot (if refinement level <= 3)
-    if ref_level <= 3:
+    # 4. Conditionally Add Mesh Plot
+    if ref_level <= 5:
         AddPlot("Mesh", "main")
-        # Optional: Set mesh to be slightly transparent or a specific color
-        # so it doesn't obscure the Pseudocolor data
+
         m_plot_atts = MeshAttributes()
-        m_plot_atts.legendFlag = 0 # Hide mesh legend to keep it clean
+        m_plot_atts.legendFlag = 0
         SetPlotOptions(m_plot_atts)
 
     DrawPlots()
@@ -62,7 +82,7 @@ def save_variable(variable_name, output_path, ref_level):
     s.fileName = output_path
     SetSaveWindowAttributes(s)
     SaveWindow()
-    print(f"Saved: {output_path}.png (Ref: {ref_level}, Smooth: {SMOOTHING_LEVEL})")
+    print(f"Saved: {output_path}.png")
 
 # 4. Main Loop
 for d in solution_dirs:
