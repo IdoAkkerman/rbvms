@@ -313,7 +313,7 @@ int main(int argc, char *argv[])
    jac_prec.SetPreconditioner(1, pc_cont);
 
    // Set up the Jacobian solver
-   RBVMS::GeneralResidualMonitor j_monitor("\t\tFGMRES", 10);
+   RBVMS::GeneralResidualMonitor j_monitor("\t\tFGMRES", 50);
    FGMRESSolver j_gmres(MPI_COMM_WORLD);
    j_gmres.iterative_mode = false;
    j_gmres.SetRelTol(GMRES_RelTol);
@@ -340,8 +340,10 @@ int main(int argc, char *argv[])
    LibCoefficient suction(lib_file, "suction", false, 0.0);
    LibCoefficient blowing(lib_file, "blowing", false, 0.0);
 
+   InverseEstimateCoefficient inv_est(spaces[0], mu);
+
    // Define weak form and evolution
-   RBVMS::IncNavStoIntegrator integrator(rho, mu, force, sol, suction, blowing);
+   RBVMS::IncNavStoIntegrator integrator(rho, mu, force, sol, suction, blowing, inv_est);
    RBVMS::NavStoForm form(spaces, integrator);
    RBVMS::Evolution evo(form, newton_solver);
    ode_solver->Init(evo);
@@ -429,7 +431,7 @@ int main(int argc, char *argv[])
    {
       // Define initial condition from file
       t = 0.0; si = 0; ri = 1; vi = 1;
-      LibVectorCoefficient sol(dim, lib_file, "sol_u");
+     // LibVectorCoefficient sol(dim, lib_file, "sol_u");
       sol.SetTime(-1.0);
       x_u.ProjectCoefficient(sol);
       x_p = 0.0;

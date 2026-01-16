@@ -35,6 +35,8 @@ private:
    real_t dt = -1.0;
    DenseMatrix Gij;
    Vector hn;
+   Coefficient &c_invEst;
+
 
    /// Dimension data
    int dim = -1;
@@ -54,6 +56,7 @@ private:
    /// Compute RBVMS stabilisation parameters
    void GetTau(real_t &tau_m, real_t &tau_c, real_t &cfl2,
                real_t &rho, real_t &mu, Vector &u,
+               real_t &muCh2,
                ElementTransformation &Tr);
 
    /// Compute Weak Dirichlet stabilisation parameters
@@ -69,7 +72,8 @@ public:
                        VectorCoefficient &force_,
                        VectorCoefficient &sol_,
                        Coefficient &suction_,
-                       Coefficient &blowing_);
+                       Coefficient &blowing_,
+                       Coefficient &invEst_);
 
    /// Set the timestep size @a dt_
    void SetTimeAndStep(const real_t &t, const real_t &dt_)

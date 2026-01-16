@@ -120,14 +120,14 @@ real_t Eigenvalue(DenseMatrix &a, DenseMatrix &b, int i = -1)
 }
 
 InverseEstimateCoefficient::InverseEstimateCoefficient(FiniteElementSpace *f)
-   : fes(f), Q(NULL), ir(NULL)
+   : fes(f), ir(NULL), Q(NULL)
 {
    ComputeInverseEstimates();
 }
 
 InverseEstimateCoefficient::InverseEstimateCoefficient(FiniteElementSpace *f,
                                                        Coefficient &q)
-   : fes(f), Q(&q), ir(NULL)
+   : fes(f), ir(NULL), Q(NULL)
 {
    ComputeInverseEstimates();
 }

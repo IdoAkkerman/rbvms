@@ -16,9 +16,10 @@ IncNavStoIntegrator::IncNavStoIntegrator(Coefficient &rho,
                                          VectorCoefficient &force,
                                          VectorCoefficient &sol,
                                          Coefficient &suction,
-                                         Coefficient &blowing)
+                                         Coefficient &blowing,
+                                         Coefficient &invEst)
    : c_rho(rho), c_mu(mu), c_force(force), c_sol(sol),
-     c_suction(suction), c_blowing(blowing)
+     c_suction(suction), c_blowing(blowing), c_invEst(invEst)
 {
    dim = force.GetVDim();
    u.SetSize(dim);
@@ -58,10 +59,11 @@ IncNavStoIntegrator::IncNavStoIntegrator(Coefficient &rho,
 
 // Compute RBVMS stabilisation parameters
 void IncNavStoIntegrator::GetTau(real_t &tau_m, real_t &tau_c, real_t &cfl2,
-                                 real_t& rho, real_t &mu, Vector &u,
+                                 real_t& rho, real_t &mu, Vector &uu,
+                                 real_t &muCh2,
                                  ElementTransformation &T)
 {
-   real_t Cd = 6.0;
+   //real_t Cd = 6.0;
    real_t Ct = 1.0;
 
    // Metric tensor
@@ -74,28 +76,30 @@ void IncNavStoIntegrator::GetTau(real_t &tau_m, real_t &tau_c, real_t &cfl2,
    tau_c = 0.0;
    for (int j = 0; j < dim; j++)
    {
-      real_t uj = u[j];
+      real_t uj = uu[j];
       for (int i = 0; i < dim; i++)
       {
-         tau_c += Gij(i,j)*u[i]*uj;
+         tau_c += Gij(i,j)*uu[i]*uj;
       }
    }
    cfl2 = tau_c/tau_m;
    tau_m += tau_c;
    tau_m *= rho*rho;
 
+   
+
    // Diffusive part
-   real_t tmp = Cd*Cd*mu*mu;
+   /*real_t tmp = Cd*Cd*mu*mu;
    for (int j = 0; j < dim; j++)
    {
       for (int i = 0; i < dim; i++)
       {
          tau_m  += tmp*Gij(i,j)*Gij(i,j);
       }
-   }
+   }*/
 
    // Momentum stabilisation parameter
-   tau_m = 1.0/sqrt(tau_m);
+   tau_m = 1.0/(sqrt(tau_m) + muCh2);
 
    // Continuity stabilisation parameter
    tau_c = 1.0/(tau_m*Gij.Trace());
@@ -182,13 +186,13 @@ real_t IncNavStoIntegrator::GetElemArtDiff(const Array<const FiniteElement *>
 
 // Compute Weak Dirichlet stabilisation parameters
 void IncNavStoIntegrator::GetTauB(real_t &tau_b, real_t &tau_n,
-                                  real_t &mu, Vector &u,
-                                  Vector &nor,
+                                  real_t &mu, Vector &uu,
+                                  Vector &norr,
                                   FaceElementTransformations &Tr)
 {
    real_t Cb = 12.0;
 
-   Tr.Elem1->InverseJacobian().Mult(nor,hn);
+   Tr.Elem1->InverseJacobian().Mult(norr,hn);
    tau_b = Cb*mu*hn.Norml2();
    tau_n = 100.0;
 }
@@ -317,12 +321,12 @@ void IncNavStoIntegrator::AssembleElementVector(
       {
          el[0]->CalcPhysHessian(Tr,shh_u);
          MultAtB(elf_u, shh_u, hess_u);
-         for (int i = 0; i < dim; ++i)
+         for (int ii = 0; ii < dim; ++ii)
          {
-            for (int j = 0; j < dim; ++j)
+            for (int jj = 0; jj < dim; ++jj)
             {
-               res_m[j] -= mu*(hess_u(j,hmap(i,i)) +
-                               hess_u(i,hmap(j,i)));
+               res_m[jj] -= mu*(hess_u(jj,hmap(ii,i)) +
+                                hess_u(ii,hmap(jj,ii)));
             }
          }
       }
@@ -334,7 +338,8 @@ void IncNavStoIntegrator::AssembleElementVector(
       real_t res_c = grad_u.Trace();
 
       // Compute stability params
-      GetTau(tau_m, tau_c, cfl2, rho, mu, u, Tr);
+      real_t muCh2 = c_invEst.Eval(Tr, ip);
+      GetTau(tau_m, tau_c, cfl2, rho, mu, u, muCh2, Tr);
       elem_cfl = fmax(elem_cfl, cfl2);
 
       // Small scale reconstruction
@@ -482,7 +487,8 @@ void IncNavStoIntegrator::AssembleElementGrad(
       }
 
       // Compute stability params
-      GetTau(tau_m, tau_c, cfl2, rho, mu, u, Tr);
+      real_t muCh2 = c_invEst.Eval(Tr, ip);
+      GetTau(tau_m, tau_c, cfl2, rho, mu, u, muCh2, Tr);
 
       // Small scale reconstruction
       up.Set(-tau_m,res_m);
