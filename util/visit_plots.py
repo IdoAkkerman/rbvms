@@ -4,6 +4,9 @@ import glob
 
 OUTPUT_DIR = "plots"
 RESOLUTION = (1024, 1024)
+SMOOTHING_LEVEL = 5
+MIN_CLIP = -10000.0
+MAX_CLIP = 10000.0       # Example upper bound for your data
 
 if not os.path.exists(OUTPUT_DIR):
     try:
@@ -25,26 +28,42 @@ if not solution_dirs:
 s = SaveWindowAttributes()
 s.format = s.PNG
 s.width, s.height = RESOLUTION
-s.screenCapture = 0 
-s.family = 0 
+s.screenCapture = 0
+s.family = 0
 SetSaveWindowAttributes(s)
 
-def save_variable(variable_name, output_path):
-    """
-    Clears old plots, adds the new variable, draws, and saves.
-    """
-    # clear previous plots ensures we don't overlay error on top of phi
-    DeleteAllPlots() 
+def save_variable(variable_name, output_path, ref_level):
+    DeleteAllPlots()
 
-    # I disabled the mesh, because for high refinement, it's just pure black
-    # AddPlot("Mesh", "main")
-    
-    # Add the Pseudocolor plot
+    # 1. Add the Pseudocolor plot
     AddPlot("Pseudocolor", variable_name)
-    
+
+    # 2. Apply Threshold (Min/Max Clipping)
+    AddOperator("Threshold", 0)
+    t_atts = ThresholdAttributes()
+    # Most versions use listedVarNames as a tuple of strings
+    t_atts.listedVarNames = (variable_name,)
+    t_atts.lowerBounds = (float(MIN_CLIP),)
+    t_atts.upperBounds = (float(MAX_CLIP),)
+    SetOperatorOptions(t_atts)
+
+    # 3. Apply Multires Control (Smoothing)
+    AddOperator("MultiresControl", 0)
+    m_atts = MultiresControlAttributes()
+    m_atts.resolution = SMOOTHING_LEVEL
+    SetOperatorOptions(m_atts)
+
+    # 4. Conditionally Add Mesh Plot
+    if ref_level <= 5:
+        AddPlot("Mesh", "main")
+
+        m_plot_atts = MeshAttributes()
+        m_plot_atts.legendFlag = 0
+        SetPlotOptions(m_plot_atts)
+
     DrawPlots()
 
-    # Set filename
+    # Set filename and save
     s.fileName = output_path
     SetSaveWindowAttributes(s)
     SaveWindow()
@@ -52,62 +71,57 @@ def save_variable(variable_name, output_path):
 
 # 4. Main Loop
 for d in solution_dirs:
-    # Find ALL .mfem_root files inside the solution folder
-    root_files = glob.glob(os.path.join(d, "*.mfem_root"))
-    
-    # Sort them so we process step_00, step_01 in order
-    root_files.sort()
-    
-    if not root_files:
-        print(f"Skipping {d}: No .mfem_root files found.")
-        continue
-        
-    print(f"--- Processing directory: {d} ---")
+    # Logic to extract refinement level from folder name (e.g., solution_r4 -> 4)
+    # If it's just 'solution', we treat it as a high-ref reference
+    try:
+        if "_r" in d:
+            current_ref_level = int(d.split('_r')[-1])
+        else:
+            current_ref_level = 99 # Reference solution
+    except ValueError:
+        current_ref_level = 99
 
-    # Inner loop: Iterate over every time step (every .mfem_root file)
+    root_files = glob.glob(os.path.join(d, "*.mfem_root"))
+    root_files.sort()
+
+    if not root_files:
+        continue
+
+    print(f"--- Processing directory: {d} (Level {current_ref_level}) ---")
+
     for db_path in root_files:
-        
-        # Extract step name (e.g. "step_000000")
         filename_only = os.path.basename(db_path)
         step_name = os.path.splitext(filename_only)[0]
 
-        # Skip step 0 (boundary conditions only)
         if step_name.endswith("_000000"):
             continue
 
-        # Open the specific time step
         if OpenDatabase(db_path, 0):
-            
             if step_name.startswith("step_"):
                 # Plot phi
                 full_path_phi = os.path.join(OUTPUT_DIR, f"{d}_{step_name}_phi")
                 try:
-                    save_variable("phi", full_path_phi)
+                    save_variable("phi", full_path_phi, current_ref_level)
                 except Exception as e:
                     print(f"Error plotting phi for {db_path}: {e}")
 
-                # Plot error (skip for reference solution)
+                # Plot error
                 if d != "solution":
                     full_path_err = os.path.join(OUTPUT_DIR, f"{d}_{step_name}_error")
                     try:
-                        save_variable("error", full_path_err)
+                        save_variable("error", full_path_err, current_ref_level)
                     except Exception as e:
                         print(f"Error plotting error for {db_path}: {e}")
-            
+
             elif step_name.startswith("tau_"):
-                # Plot tau
                 full_path_tau = os.path.join(OUTPUT_DIR, f"{d}_{step_name}_tau")
                 try:
-                    save_variable("tau", full_path_tau)
+                    save_variable("tau", full_path_tau, current_ref_level)
                 except Exception as e:
                     print(f"Error plotting tau for {db_path}: {e}")
 
-            # Delete plots *before* closing the database
             DeleteAllPlots()
-            
             CloseDatabase(db_path)
-        else:
-            print(f"Failed to open database: {db_path}")
 
 print("Batch processing complete.")
 sys.exit()
