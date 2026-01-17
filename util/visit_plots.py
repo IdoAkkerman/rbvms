@@ -6,7 +6,8 @@ OUTPUT_DIR = "plots"
 RESOLUTION = (1024, 1024)
 SMOOTHING_LEVEL = 5
 MIN_CLIP = -10000.0
-MAX_CLIP = 10000.0       # Example upper bound for your data
+MAX_CLIP = 10000.0
+MESH_VISIBILITY_LEVEL = 5
 
 if not os.path.exists(OUTPUT_DIR):
     try:
@@ -54,7 +55,7 @@ def save_variable(variable_name, output_path, ref_level):
     SetOperatorOptions(m_atts)
 
     # 4. Conditionally Add Mesh Plot
-    if ref_level <= 5:
+    if ref_level <= MESH_VISIBILITY_LEVEL:
         AddPlot("Mesh", "main")
 
         m_plot_atts = MeshAttributes()
@@ -69,15 +70,13 @@ def save_variable(variable_name, output_path, ref_level):
     SaveWindow()
     print(f"Saved: {output_path}.png")
 
-# 4. Main Loop
+# Main Loop
 for d in solution_dirs:
-    # Logic to extract refinement level from folder name (e.g., solution_r4 -> 4)
-    # If it's just 'solution', we treat it as a high-ref reference
     try:
         if "_r" in d:
             current_ref_level = int(d.split('_r')[-1])
         else:
-            current_ref_level = 99 # Reference solution
+            current_ref_level = 10
     except ValueError:
         current_ref_level = 99
 
