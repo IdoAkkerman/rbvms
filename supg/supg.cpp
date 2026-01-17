@@ -363,7 +363,7 @@ int main(int argc, char *argv[])
    // Define the gridfunction and solution vector
    ParGridFunction phi_gf(space);
    LibCoefficient sol_phi(lib_file, "sol_phi");
-   phi_gf.ProjectCoefficient(sol_phi);
+   phi_gf.ProjectCoefficient(sol_phi, ProjectType::ELEMENT);
    Vector xp;
    phi_gf.GetTrueDofs(xp);
 
