@@ -9,8 +9,8 @@
 set -e # Exit on error
 
 # Default parameters
-ref_level=10
-sweep="1 2 3 4 5"
+ref_level=8
+sweep="1 2 3 4 5 6 7"
 clean_ref=false
 exe="../../build/supg/supg"
 
