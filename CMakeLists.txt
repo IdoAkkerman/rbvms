@@ -113,7 +113,9 @@ if (DEFINED MFEM_DIR)
                    HINTS "${PRECICE_DIR}" "${PRECICE_DIR}/lib/cmake/precice")
       list(APPEND ${LIBRARIES} "precice::precice")
       message(STATUS "Found precice config in: ${precice_DIR} (version ${precice_VERSION})")
-      add_compile_definitions(WITH_PRECICE)
+      set(RBVMS_USE_PRECICE YES)
+   else()
+      set(RBVMS_USE_PRECICE NO)
    endif()
 
    #----------------------------------------------------------------------------
