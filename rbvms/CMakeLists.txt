@@ -8,7 +8,6 @@
 # Add Files
 #-------------------------------------------------------------------------------
 set(SOURCES
-    rbvms.cpp
     formulation.cpp
     integrator.cpp)
 
@@ -23,9 +22,14 @@ include_directories(../util)
 
 if (MFEM_USE_CUDA)
    enable_language(CUDA)
-   set_source_files_properties(${SOURCES} PROPERTIES LANGUAGE CUDA)
+   set_source_files_properties(rbvms.cpp rbvms-fsi.cpp${SOURCES} PROPERTIES LANGUAGE CUDA)
 endif()
 
-add_executable(rbvms  ${SOURCES} ${HEADERS})
+add_executable(rbvms rbvms.cpp ${SOURCES} ${HEADERS})
 target_link_libraries(rbvms PRIVATE ${LIBRARIES} util ${CMAKE_DL_LIBS})
 install(TARGETS rbvms DESTINATION bin)
+if (RBVMS_USE_PRECICE)
+   add_executable(rbvms-fsi rbvms-fsi.cpp ${SOURCES} ${HEADERS})
+   target_link_libraries(rbvms-fsi  PRIVATE ${LIBRARIES} util ${CMAKE_DL_LIBS})
+   install(TARGETS rbvms-fsi DESTINATION bin)
+endif()
