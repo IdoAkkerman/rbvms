@@ -54,8 +54,8 @@ public:
   {
     // Compute total moment M = x^{n} x f^{n+1}
     double moment = 0;
-    for (unsigned int i = 0; i < forces.size() / 2; ++i)
-      moment += vertices[2 * i] * forces[2 * i + 1] - vertices[2 * i + 1] * forces[2 * i];
+  //for (unsigned int i = 0; i < forces.size() / 2; ++i)--> CHANGED BY IA 
+  //   moment += vertices[2 * i] * forces[2 * i + 1] - vertices[2 * i + 1] * forces[2 * i];--> CHANGED BY IA 
 
     // Store rigid body angle at the previous time level theta^{n}
     const double theta_old = theta;
@@ -108,8 +108,9 @@ int main()
   constexpr double spring_constant = -25;
 
   // Time, where spring is stiffened
-  constexpr double switch_time       = 1.5;
-  constexpr double stiffening_factor = 8;
+  constexpr double switch_time       = 0.25; // 1.5; --> CHANGED BY IA
+  constexpr double stiffening_factor = 6;    // 8; --> CHANGED BY IA
+
   //*******************************************************************************************//
 
   // Derived quantities
@@ -138,7 +139,7 @@ int main()
   Vector           vertices(dim * n_nodes);
   Vector           displacement(dim * n_nodes);
   std::vector<int> vertex_ids(n_nodes);
-  double           theta_dot = 0.0;
+  double           theta_dot = 1.0; // 0.0; --> CHANGED BY IA
   double           theta     = 0.0;
 
   {
