@@ -1,0 +1,17 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "compileCommands": [
+                "${workspaceFolder}/build/mfem/compile_commands.json"
+            ],
+            "intelliSenseMode": "gcc-x64",
+            "cppStandard": "c++11",
+            "cStandard": "c17",
+            "includePath": [
+                "${default}"
+            ]
+        }
+    ],
+    "version": 4
+}
