@@ -111,9 +111,11 @@ if (DEFINED MFEM_DIR)
    if (DEFINED PRECICE_DIR)
       find_package(precice REQUIRED
                    HINTS "${PRECICE_DIR}" "${PRECICE_DIR}/lib/cmake/precice")
-      list(APPEND ${LIBRARIES} "precice::precice")
+
+      list(APPEND LIBRARIES "precice")
       message(STATUS "Found precice config in: ${precice_DIR} (version ${precice_VERSION})")
       set(RBVMS_USE_PRECICE YES)
+      add_definitions(-DRBVMS_USE_PRECICE=1)
    else()
       set(RBVMS_USE_PRECICE NO)
    endif()
@@ -184,6 +186,7 @@ else()
                        PREFIX ${INSTALL_DIR}
                        DEPENDS mfem
                        CMAKE_ARGS -DMFEM_DIR=${INSTALL_DIR}
+                                  -DPRECICE_DIR=${PRECICE_DIR}
                                   -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}
                                   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
                                   -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
