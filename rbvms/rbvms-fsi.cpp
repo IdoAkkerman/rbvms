@@ -14,6 +14,8 @@
 //------------------------------------------------------------------------------
 #include <sys/stat.h>
 #include "mfem.hpp"
+#include "precice/precice.hpp"
+
 #include "../util/coefficients.hpp"
 #include "../util/solver.hpp"
 
@@ -81,7 +83,7 @@ int main(int argc, char *argv[])
    Array<int> master_bdr;
    Array<int> slave_bdr;
    Array<int> fsi_bdr;
-   
+
    const char *lib_file = "libfun.so";
    real_t rho_param = 1.204;
    real_t mu_param = 1.825e-5;
@@ -153,6 +155,18 @@ int main(int argc, char *argv[])
                   "Relative tolerance for the Newton solver.");
    args.AddOption(&Newton_MaxIter, "-ni", "--newton-itermax",
                   "Maximum iteration count for the Newton solver.");
+
+   // Precice parameters
+   const char *precice_solverName = "Fluid";
+   const char *precice_configFile = "../precice-config.xml";
+   const char *precice_meshName = "Fluid-Mesh";
+
+   args.AddOption(&precice_solverName, "-ps", "--precice-solver",
+                  "Name of the precice solver");
+   args.AddOption(&precice_configFile, "-pc", "--precice-config",
+                  "Precice configuration file");
+   args.AddOption(&precice_meshName, "-pm", "--precice-mesh",
+                  "Name of the precice mesh");
 
    // Solution input/output params
    bool restart = false;
@@ -226,6 +240,7 @@ int main(int argc, char *argv[])
    CheckBoundaries(bnd_flag, blowing_bdr);
    CheckBoundaries(bnd_flag, master_bdr);
    CheckBoundaries(bnd_flag, slave_bdr);
+   CheckBoundaries(bnd_flag, fsi_bdr);
 
    MFEM_VERIFY(master_bdr.Size() == master_bdr.Size(),
                "Master-slave count do not match.");
@@ -237,7 +252,8 @@ int main(int argc, char *argv[])
 
    // Select the time integrator
    unique_ptr<ODESolver> ode_solver = ODESolver::Select(ode_solver_type);
-   ODESolverWithStates*  ode_solver_ws = dynamic_cast<ODESolverWithStates*>(ode_solver.get());
+   ODESolverWithStates*  ode_solver_ws = dynamic_cast<ODESolverWithStates*>
+                                         (ode_solver.get());
    int nstate = ode_solver->GetStateSize();
 
    if (nstate > 1 && ( restart || restart_interval > 0 ))
@@ -300,21 +316,87 @@ int main(int argc, char *argv[])
    bOffsets.PartialSum();
 
    // Get FSI boundaries dofs
-   Array<int> bdr_is fsi(pmesh.bdr_attributes.Max()+1);
-   bdr_is fsi = 0;
+   Array<int> bdr_is_fsi(pmesh.bdr_attributes.Max()+1);
+   bdr_is_fsi = 0;
    for (int b = 0; b < fsi_bdr.Size(); b++)
    {
-      int bnd = fsi_bdr[b];
-      if ( bnd < 0 || bnd > bdr_is fsi.Size() )
+      int bnd = fsi_bdr[b]-1;
+      if ( bnd < 0 || bnd > bdr_is_fsi.Size() )
       {
          mfem_error("FSI Boundary out of range.");
       }
-      bdr_is fsi[bnd] = 1;
+      bdr_is_fsi[bnd] = 1;
    }
 
    Array<int> fsi_dofs0, fsi_dofs1;
-   spaces[0].GetEssentialTrueDofs(bdr_is fsi,fsi_dofs0);
-   spaces[1].GetEssentialTrueDofs(bdr_is fsi,fsi_dofs1);
+   spaces[0]->GetEssentialTrueDofs(bdr_is_fsi,fsi_dofs0);
+   spaces[1]->GetEssentialTrueDofs(bdr_is_fsi,fsi_dofs1);
+
+   // Configure precice
+   precice::Participant precice(std::string(precice_solverName),
+                                std::string(precice_configFile), 0, 1); //??,rank,size);
+   const std::string meshName(precice_meshName);
+   std::vector<int>     vertexIDs;
+   int vertexSize;
+   Array<int> fsi_dofs;
+   {
+      MFEM_VERIFY(precice.getMeshDimensions(meshName) == dim,
+                  "MFEM and Precice dimension don't match!");
+
+      // Get nodes gridfunction
+      pmesh.EnsureNodes();
+      GridFunction *nodes = pmesh.GetNodes();
+
+      // Get boundary dofs
+      Array<int> fsi_dofs;
+      FiniteElementSpace *fes = nodes->FESpace();
+      fes->GetEssentialTrueDofs(bdr_is_fsi,fsi_dofs);
+      vertexSize = fsi_dofs.Size()/dim;
+
+      // Get boundary coordinates
+      std::vector<double>  vertices(vertexSize * dim);
+      vertexIDs.resize(vertexSize);
+
+      if (fes->GetOrdering() == Ordering::byNODES)
+      {
+         for (int i = 0; i < vertexSize*dim; i++)
+         {
+            vertices.at(i) = nodes->Elem(fsi_dofs[i]);
+         }
+      }
+      else if (fes->GetOrdering() == Ordering::byVDIM)
+      {
+         for (int j = 0, ii = 0; j < dim; j++)
+         {
+            for (int i = 0; i < vertexSize; i++)
+            {
+               vertices.at(j + i*dim) = nodes->Elem(fsi_dofs[ii++]);
+            }
+         }
+      }
+      else
+      {
+         mfem_error("Used FESpace Ordering not handled by precice init.");
+      }
+
+      // Set boundary coordinates
+      precice.setMeshVertices(meshName, vertices, vertexIDs);
+   }
+
+   // Set vectors
+   const int forceDim = precice.getDataDimensions(meshName,"Force");
+   const int dispDim = precice.getDataDimensions(meshName,"Displacement");
+
+   MFEM_VERIFY(precice.getDataDimensions(meshName,"Force") == dim,
+               "MFEM and Precice dimension don't match!");
+   MFEM_VERIFY(precice.getDataDimensions(meshName,"Displacement") == dim,
+               "MFEM and Precice dimension don't match!");
+
+   std::vector<double> forces(vertexSize*dim);
+   std::vector<double> disp(vertexSize*dim);
+
+   mfem::out<<"forceDim = "<<forces.size()<<std::endl;
+   mfem::out<<"dispDim  = "<<disp .size()<<std::endl;
 
    // 5. Define the time stepping algorithm
 
@@ -475,8 +557,8 @@ int main(int argc, char *argv[])
    rdc.RegisterField("p", &x_p);
    if (nstate == 1)
    {
-       rdc.RegisterField("du", dx_u[0]);
-       rdc.RegisterField("dp", dx_p[0]);
+      rdc.RegisterField("du", dx_u[0]);
+      rdc.RegisterField("dp", dx_p[0]);
    }
 
    // 7. Actual time integration
@@ -508,15 +590,16 @@ int main(int argc, char *argv[])
       os<<endl;
    }
 
- //  Vector precice_vector1(fsi_dofs1.Size());
- //  Vector precice_vector0(fsi_dofs0.Size());
-
-  // xp.GetBlock(1).GetSubVector(fsi_dofs1, precice_vector1);
-  //  xp.GetBlock(0).SetSubVector(fsi_dofs0, precice_vector0);
-
-   // Loop till final time reached
-   while (t < t_final)
+   precice.initialize();
+   while (precice.isCouplingOngoing())
    {
+
+      if (precice.requiresWritingCheckpoint())
+      {
+         // IA TBD      data_container.save_old_state(vertices, theta, theta_dot, time);
+         xp0 = xp; // Correct???
+      }
+
       // Print header
       if (Mpi::Root())
       {
@@ -530,155 +613,177 @@ int main(int argc, char *argv[])
          line(80);
       }
 
-      // Actual time step
-      xp0 = xp;
-
+      precice.readData(meshName,
+                       "Displacement",
+                       vertexIDs,
+                       0,
+                       disp);
+      Vector disp_ref(disp.data(), disp.size());
+      disp_ref.Print(mfem::out,vertexSize);
       ode_solver->Step(xp, t, dt);
-      si++;
 
-      // Postprocess solution
-      real_t cfl = form.GetCFL();
-      real_t outflow = form.GetOutflow();
-      DenseMatrix bdrForce = form.GetForce();
-      if (Mpi::Root())
+      precice.writeData(meshName,
+                        "Force",
+                        vertexIDs,
+                        forces);
+
+      // Reload time dependent values
+      if (precice.requiresReadingCheckpoint())
       {
-         // Print to file
-         int nbdr = pmesh.bdr_attributes.Size();
-         os << std::setw(10);
-         os << si<<"\t"<<t<<"\t"<<dt<<"\t"<<cfl<<"\t"<<outflow<<"\t";
-         for (int b=0; b<nbdr; ++b)
-         {
-            int bnd = pmesh.bdr_attributes[b];
-            for (int v=0; v<dim; ++v)
-            {
-               os<<bdrForce(bnd-1,v)<<"\t";
-            }
-         }
-         os<<"\n"<< std::flush;
+         //   data_container.reload_old_state(vertices, theta, theta_dot, time);
+      }
 
-         // Print line lambda function
-         auto pline = [](int len)
-         {
-            cout<<" +";
-            for (int b=0; b<len; ++b) { cout<<"-"; }
-            cout<<"+\n";
-         };
+      // Increment time in case the time window has been completed
+      if (precice.isTimeWindowComplete())
+      {
+         si++;
 
-         // Print boundary header
-         cout<<"\n";
-         pline(10+13*nbdr);
-         cout<<" | Boundary | ";
-         for (int b=0; b<nbdr; ++b)
+         // Postprocess solution
+         real_t cfl = form.GetCFL();
+         real_t outflow = form.GetOutflow();
+         DenseMatrix bdrForce = form.GetForce();
+         if (Mpi::Root())
          {
-            cout<<std::setw(10)<<pmesh.bdr_attributes[b]<<" | ";
-         }
-         cout<<"\n";
-         pline(10+13*nbdr);
-
-         // Print actual forces
-         char dimName[] = "xyz";
-         for (int v=0; v<dim; ++v)
-         {
-            cout<<" | Force "<<dimName[v]<<"  | ";
+            // Print to file
+            int nbdr = pmesh.bdr_attributes.Size();
+            os << std::setw(10);
+            os << si<<"\t"<<t<<"\t"<<dt<<"\t"<<cfl<<"\t"<<outflow<<"\t";
             for (int b=0; b<nbdr; ++b)
             {
                int bnd = pmesh.bdr_attributes[b];
-               cout<<std::defaultfloat<<std::setprecision(4)<<std::setw(10);
-               cout<<bdrForce(bnd-1,v)<<" | ";
+               for (int v=0; v<dim; ++v)
+               {
+                  os<<bdrForce(bnd-1,v)<<"\t";
+               }
+            }
+            os<<"\n"<< std::flush;
+
+            // Print line lambda function
+            auto pline = [](int len)
+            {
+               cout<<" +";
+               for (int b=0; b<len; ++b) { cout<<"-"; }
+               cout<<"+\n";
+            };
+
+            // Print boundary header
+            cout<<"\n";
+            pline(10+13*nbdr);
+            cout<<" | Boundary | ";
+            for (int b=0; b<nbdr; ++b)
+            {
+               cout<<std::setw(10)<<pmesh.bdr_attributes[b]<<" | ";
             }
             cout<<"\n";
+            pline(10+13*nbdr);
+
+            // Print actual forces
+            char dimName[] = "xyz";
+            for (int v=0; v<dim; ++v)
+            {
+               cout<<" | Force "<<dimName[v]<<"  | ";
+               for (int b=0; b<nbdr; ++b)
+               {
+                  int bnd = pmesh.bdr_attributes[b];
+                  cout<<std::defaultfloat<<std::setprecision(4)<<std::setw(10);
+                  cout<<bdrForce(bnd-1,v)<<" | ";
+               }
+               cout<<"\n";
+            }
+            pline(10+13*nbdr);
+            cout<<"\n"<<std::flush;
          }
-         pline(10+13*nbdr);
-         cout<<"\n"<<std::flush;
-      }
 
-      // Write visualization files
-      while (t >= dt_vis*vi)
-      {
-         // Interpolate solution
-         real_t fac = (t-dt_vis*vi)/dt;
+         // Write visualization files
+         while (t >= dt_vis*vi)
+         {
+            // Interpolate solution
+            real_t fac = (t-dt_vis*vi)/dt;
 
-         // Report to screen
+            // Report to screen
+            if (Mpi::Root())
+            {
+               line(80);
+               cout << "Visit output: " <<vi << endl;
+               cout << "        Time: " <<t-dt<<" "<<t-fac*dt<<" "<<t<<endl;
+               line(80);
+            }
+
+            // Copy solution in grid functions
+            add (fac, xp0.GetBlock(0),(1.0-fac), xp.GetBlock(0), xpi.GetBlock(0));
+            x_u.Distribute(xpi.GetBlock(0));
+
+            add (-1.0/dt, xp0.GetBlock(1), 1.0/dt, xp.GetBlock(1), xpi.GetBlock(1));
+            x_p.Distribute(xpi.GetBlock(1));
+
+            // Actually write to file
+            vdc.SetCycle(vi);
+            vdc.SetTime(dt_vis*vi);
+            vdc.Save();
+            vi++;
+         }
+
+         // Change time step
+         real_t dt0 = dt;
+         if ((dt_gain > 0))
+         {
+            dt *= pow(cfl_target/cfl, dt_gain);
+            dt = min(dt, dt_max);
+            dt = max(dt, dt_min);
+         }
+
+         // Print cfl and dt to screen
          if (Mpi::Root())
          {
             line(80);
-            cout << "Visit output: " <<vi << endl;
-            cout << "        Time: " <<t-dt<<" "<<t-fac*dt<<" "<<t<<endl;
+            cout<<" outflow = "<<outflow<<endl;
+            cout<<" cfl = "<<cfl<<endl;
+            cout<<" dt  = "<<dt0<<" --> "<<dt<<endl;
             line(80);
          }
 
-         // Copy solution in grid functions
-         add (fac, xp0.GetBlock(0),(1.0-fac), xp.GetBlock(0), xpi.GetBlock(0));
-         x_u.Distribute(xpi.GetBlock(0));
-
-         add (-1.0/dt, xp0.GetBlock(1), 1.0/dt, xp.GetBlock(1), xpi.GetBlock(1));
-         x_p.Distribute(xpi.GetBlock(1));
-
-         // Actually write to file
-         vdc.SetCycle(vi);
-         vdc.SetTime(dt_vis*vi);
-         vdc.Save();
-         vi++;
-      }
-
-      // Change time step
-      real_t dt0 = dt;
-      if ((dt_gain > 0))
-      {
-         dt *= pow(cfl_target/cfl, dt_gain);
-         dt = min(dt, dt_max);
-         dt = max(dt, dt_min);
-      }
-
-      // Print cfl and dt to screen
-      if (Mpi::Root())
-      {
-         line(80);
-         cout<<" outflow = "<<outflow<<endl;
-         cout<<" cfl = "<<cfl<<endl;
-         cout<<" dt  = "<<dt0<<" --> "<<dt<<endl;
-         line(80);
-      }
-
-      // Write restart files
-      if (restart_interval > 0 && si%restart_interval == 0)
-      {
-         // Report to screen
-         if (Mpi::Root())
+         // Write restart files
+         if (restart_interval > 0 && si%restart_interval == 0)
          {
-            line(80);
-            cout << "Restart output:" << ri << endl;
-            line(80);
-         }
+            // Report to screen
+            if (Mpi::Root())
+            {
+               line(80);
+               cout << "Restart output:" << ri << endl;
+               line(80);
+            }
 
-         // Copy solution in grid functions
-         x_u.Distribute(xp.GetBlock(0));
-         x_p.Distribute(xp.GetBlock(1));
+            // Copy solution in grid functions
+            x_u.Distribute(xp.GetBlock(0));
+            x_p.Distribute(xp.GetBlock(1));
 
-         if (nstate == 1)
-         {
-            ode_solver_ws->GetState().Get(0,dxp);
-            dx_u[0]->Distribute(dxp.GetBlock(0));
-            dx_p[0]->Distribute(dxp.GetBlock(1));
-         }
+            if (nstate == 1)
+            {
+               ode_solver_ws->GetState().Get(0,dxp);
+               dx_u[0]->Distribute(dxp.GetBlock(0));
+               dx_p[0]->Distribute(dxp.GetBlock(1));
+            }
 
-         // Actually write to file
-         rdc.SetCycle(ri);
-         rdc.SetTime(t);
-         rdc.Save();
-         ri++;
+            // Actually write to file
+            rdc.SetCycle(ri);
+            rdc.SetTime(t);
+            rdc.Save();
+            ri++;
 
-         // print meta file
-         if (Mpi::Root())
-         {
-            std::ofstream step("restart/step.dat", std::ifstream::out);
-            step<<t<<"\t"<<si<<"\t"<<ri<<"\t"<<vi<<endl;
-            step<<dt<<endl;
-            step.close();
+            // print meta file
+            if (Mpi::Root())
+            {
+               std::ofstream step("restart/step.dat", std::ifstream::out);
+               step<<t<<"\t"<<si<<"\t"<<ri<<"\t"<<vi<<endl;
+               step<<dt<<endl;
+               step.close();
+            }
          }
       }
 
       if (Mpi::Root()) { cout<<endl<<endl; }
+
+
    }
    os.close();
 
