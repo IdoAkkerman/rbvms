@@ -398,6 +398,10 @@ int main(int argc, char *argv[])
    mfem::out<<"forceDim = "<<forces.size()<<std::endl;
    mfem::out<<"dispDim  = "<<disp .size()<<std::endl;
 
+   // Add fsi boundary to weak or strong
+   strong_bdr.Append(fsi_bdr);
+   //weak_bdr.Append(fsi_bdr);
+
    // 5. Define the time stepping algorithm
 
    // Set up the preconditioner
