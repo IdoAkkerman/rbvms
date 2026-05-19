@@ -604,6 +604,8 @@ int main(int argc, char *argv[])
          xp0 = xp; // Correct???
       }
 
+      double precice_dt = precice.getMaxTimeStepSize();
+      double dt_used = std::min(dt, precice_dt);
       // Print header
       if (Mpi::Root())
       {
@@ -611,6 +613,8 @@ int main(int argc, char *argv[])
          cout<<std::defaultfloat<<std::setprecision(4);
          cout<<" step = " << si << endl;
          cout<<"   dt = " << dt << endl;
+         cout<<"   precice_dt = " << precice_dt << endl;
+         cout<<"   dt_used = " << dt_used << endl;
          cout<<std::defaultfloat<<std::setprecision(6);;
          cout<<" time = [" << t << ", " << t+dt <<"]"<< endl;
          cout<<std::defaultfloat<<std::setprecision(4);
@@ -622,10 +626,25 @@ int main(int argc, char *argv[])
                        vertexIDs,
                        0,
                        disp);
-      Vector disp_ref(disp.data(), disp.size());
-      disp_ref.Print(mfem::out,vertexSize);
-      ode_solver->Step(xp, t, dt);
+      //Vector disp_ref(disp.data(), disp.size());
+     // disp_ref.Print(mfem::out,vertexSize);
 
+      for (uint i = 0; i < disp.size(); ++i)
+          std::cout<<disp[i]<<" ";
+      std::cout<<std::endl;
+
+      // Mesh motion
+
+      // Extract mesh velocity
+
+      // Navier stokes
+      ode_solver->Step(xp, t, dt_used);
+      t -= dt_used;
+      precice.advance(dt_used);
+
+      // Compute force
+
+      // Communicate force
       precice.writeData(meshName,
                         "Force",
                         vertexIDs,
@@ -638,9 +657,9 @@ int main(int argc, char *argv[])
       }
 
       // Increment time in case the time window has been completed
-      if (precice.isTimeWindowComplete())
-      {
+
          si++;
+         t += dt_used;
 
          // Postprocess solution
          real_t cfl = form.GetCFL();
@@ -783,6 +802,10 @@ int main(int argc, char *argv[])
                step.close();
             }
          }
+
+
+      if (precice.isTimeWindowComplete())
+      {
       }
 
       if (Mpi::Root()) { cout<<endl<<endl; }
