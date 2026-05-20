@@ -344,65 +344,50 @@ mesh.SetCurvature(1, false, -1,  Ordering::byNODES); // MASK MFEM BUG!!!
    int vertexSize;
    Array<int> fsi_dofs;
    //{
-      MFEM_VERIFY(precice.getMeshDimensions(meshName) == dim,
-                  "MFEM and Precice dimension don't match!");
+   MFEM_VERIFY(precice.getMeshDimensions(meshName) == dim,
+               "MFEM and Precice dimension don't match!");
 
-      // Get nodes gridfunction
-      pmesh.EnsureNodes();
-      GridFunction *nodes = pmesh.GetNodes();
+   // Get nodes gridfunction
+   pmesh.EnsureNodes();
+   GridFunction *nodes = pmesh.GetNodes();
 
-      // Get boundary dofs
-      ParFiniteElementSpace *pfes = dynamic_cast<ParFiniteElementSpace *>(nodes->FESpace());
-      mfem::out <<pfes<<std::endl;
-      MFEM_VERIFY(pfes, "FESpace should be a parallel");
-      pfes->GetEssentialTrueDofs(bdr_is_fsi,fsi_dofs);
-      vertexSize = fsi_dofs.Size()/dim;
+   // Get boundary dofs
+   ParFiniteElementSpace *pfes = dynamic_cast<ParFiniteElementSpace *>(nodes->FESpace());
+   mfem::out <<pfes<<std::endl;
+   MFEM_VERIFY(pfes, "FESpace should be a parallel");
+   pfes->GetEssentialTrueDofs(bdr_is_fsi,fsi_dofs);
+   vertexSize = fsi_dofs.Size()/dim;
 
-bdr_is_fsi.Print(std::cout,888);
-fsi_dofs.Print(std::cout,888);
+   bdr_is_fsi.Print(std::cout,888);
+   fsi_dofs.Print(std::cout,888);
 
-      // Get boundary coordinates
-      std::vector<double>  vertices(vertexSize * dim);
-      vertexIDs.resize(vertexSize);
+   // Get boundary coordinates
+   std::vector<double>  vertices(vertexSize * dim);
+   vertexIDs.resize(vertexSize);
 
-    //  if (pfes->GetOrdering() == Ordering::byNODES)
-    //  {
-    //     mfem::out << "Ordering::byNODES\n";
-    //     for (int i = 0; i < vertexSize*dim; i++)
-    //     {
-    //        vertices.at(i) = nodes->Elem(fsi_dofs[i]);
-    //     }
-    //  }
-      //else if (pfes->GetOrdering() == Ordering::byVDIM)
-    //  {
-         mfem::out << " Ordering::byVDIM\n";
-         for (int j = 0, ii = 0; j < dim; j++)
-         {
-            for (int i = 0; i < vertexSize; i++)
-            {
-               vertices.at(j + i*dim) = nodes->Elem(fsi_dofs[ii++]);
-            }
-         }
-     // }
-     // else
-     // {
-     //    mfem_error("Used FESpace Ordering not handled by precice init.");
-     // }
-
-         for (int i = 0; i < vertexSize; i++)
-         {
-         std::cout<<vertices[dim * i]<<" "<<vertices[dim * i + 1]<<std::endl;
+   mfem::out << " Ordering::byVDIM\n";
+   for (int j = 0, ii = 0; j < dim; j++)
+   {
+      for (int i = 0; i < vertexSize; i++)
+      {
+         vertices.at(j + i*dim) = nodes->Elem(fsi_dofs[ii++]);
       }
+   }
 
-         for (int i = 0; i < vertexSize; i++)
-         {
-         std::cout<<vertices[i]<<" "<<vertices[vertexSize +  i]<<std::endl;
-      }
+   for (int i = 0; i < vertexSize; i++)
+   {
+      std::cout<<vertices[dim * i]<<" "<<vertices[dim * i + 1]<<std::endl;
+   }
+
+   for (int i = 0; i < vertexSize; i++)
+   {
+      std::cout<<vertices[i]<<" "<<vertices[vertexSize +  i]<<std::endl;
+   }
 
 
-      // Set boundary coordinates
-      precice.setMeshVertices(meshName, vertices, vertexIDs);
-  // }
+   // Set boundary coordinates
+   precice.setMeshVertices(meshName, vertices, vertexIDs);
+   // }
 
    // Set vectors
    const int forceDim = precice.getDataDimensions(meshName,"Force");
@@ -524,12 +509,12 @@ fsi_dofs.Print(std::cout,888);
    a_mm->AddDomainIntegrator(new ElasticityIntegrator(lambda_func, mu_func));
 
    ParLinearForm *b_mm = new ParLinearForm(pfes);
-std::cout<<"old :";
-    fsi_dofs.Print(std::cout, 8888);
-    Array<int>fsi_dofs_xd;
-  x_d.FESpace()->GetEssentialVDofs(bdr_is_fsi,fsi_dofs_xd);
-std::cout<<"new :";
-    fsi_dofs_xd.Print(std::cout, 8888);
+   std::cout<<"old :";
+   fsi_dofs.Print(std::cout, 8888);
+   Array<int>fsi_dofs_xd;
+   x_d.FESpace()->GetEssentialVDofs(bdr_is_fsi,fsi_dofs_xd);
+   std::cout<<"new :";
+   fsi_dofs_xd.Print(std::cout, 8888);
     
    // Define the visualisation output
    VisItDataCollection vdc("step", &pmesh);
@@ -537,7 +522,7 @@ std::cout<<"new :";
    vdc.RegisterField("u", &x_u);
    vdc.RegisterField("p", &x_p);
    vdc.RegisterField("d", &x_d);
-  // vdc.RegisterField("d", nodes);
+   // vdc.RegisterField("d", nodes);
    
    // Get the start vector(s) from file -- or from function
    real_t t;
@@ -618,13 +603,6 @@ std::cout<<"new :";
       rdc.RegisterField("du", dx_u[0]);
       rdc.RegisterField("dp", dx_p[0]);
    }
-
-
-
-
-
-
-
    // 7. Actual time integration
 
    // Open output file
@@ -690,72 +668,20 @@ std::cout<<"new :";
                        vertexIDs,
                        0,
                        disp);
-/* 
-std::cout<<" vertexIDs ::"<<vertexIDs.size()<<" \n";
-      for (uint i = 0; i < vertexIDs.size(); ++i)
-          std::cout<<vertexIDs[i]<<":"<<disp[2*i]<<" "<<disp[2*i+1]<<std::endl;
- 
-std::cout<<" vertexIDs ::"<<vertexIDs.size()<<" \n";
-      for (uint i = 0; i < vertexIDs.size(); ++i)
-          std::cout<<vertexIDs[i]<<":"<<disp[i]<<" "<<disp[vertexIDs.size()+i]<<std::endl;
-*/
-
-//std::cout<<" fsi_dofs::"<<fsi_dofs.Size()<<" :";
 
       // Set FSI boundary displacement
       x_d = 0.0;//std::cout<<" x_d zero ::";
-     // x_d.Print(std::cout,88);
-     // if (pfes->GetOrdering() == Ordering::byNODES)
-    //  {
-       //  mfem::out << " Ordering::byNODES\n";
-      //   int ii = 0;
-       //  for (int i = 0; i < vertexSize; i++)
-        // {
-         //   for (int j = 0; j < dim; j++)
-         //  {
-          //    i++;
-       //       x_d[fsi_dofs[i]] = nodes->Elem(fsi_dofs[i])
-          //  }
-            //std::cout<<nodes->Elem(fsi_dofs[i])<<" ";
-            //if (i%2 == 1)std::cout<<std::endl;
-        // }
-      //}
-     // else if (pfes->GetOrdering() == Ordering::byVDIM)
-   //   {
-         mfem::out << " Ordering::byVDIM\n";
-         for (int j = 0, ii = 0; j < dim; j++)
-         {
-            for (int i = 0; i < vertexSize; i++)
-            {
-        //    std::cout << i<<" "<<j<<" "<<disp[i]<<" "<<fsi_dofs[ii]<<std::endl;
-               x_d[fsi_dofs[ii++]] = disp[j + i*dim] - disp0[j + i*dim] ;
-               
-            }
-         }
-    //  }
-     // else
-     // {
-    //     mfem_error("Used FESpace Ordering not handled by precice init.");
-    //  }
-      /*int nnode = nodes->Size()/2;
-      for (int i = 0; i < nnode; i++)
+      mfem::out << " Ordering::byVDIM\n";
+      for (int j = 0, ii = 0; j < dim; j++)
       {
-            for (int j = 0; j < dim; j++)
-            {
-              int xi = i + j*nnode;
-              //int xi = j + i*dim;
-             // int ni = i + j*vertexSize;
-              int ni = j + i*dim;
-              
-              x_d[xi] = nodes->Elem(ni);
-            }
-      }*/
-      
-      
-      
-      //x_d = 0.0;
-//      std::cout<<" x_d = ";
-//x_d.Print(std::cout,88);
+         for (int i = 0; i < vertexSize; i++)
+         {
+      //    std::cout << i<<" "<<j<<" "<<disp[i]<<" "<<fsi_dofs[ii]<<std::endl;
+            x_d[fsi_dofs[ii++]] = disp[j + i*dim] - disp0[j + i*dim] ;
+            
+         }
+      }
+
       // Mesh motion using linear elastisity
       b_mm->Update();
       a_mm->Update();
