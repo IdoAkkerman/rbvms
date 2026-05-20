@@ -196,6 +196,10 @@ int main(int argc, char *argv[])
    Mesh mesh(mesh_file, 1, 1);
    int dim = mesh.Dimension();
 
+
+
+mesh.SetCurvature(1, false, -1,  Ordering::byNODES); // MASK MFEM BUG!!!
+
    // Refine mesh
    {
       if (mesh.NURBSext && (strlen(ref_file) != 0))
@@ -339,7 +343,7 @@ int main(int argc, char *argv[])
    std::vector<int>     vertexIDs;
    int vertexSize;
    Array<int> fsi_dofs;
-   {
+   //{
       MFEM_VERIFY(precice.getMeshDimensions(meshName) == dim,
                   "MFEM and Precice dimension don't match!");
 
@@ -348,24 +352,30 @@ int main(int argc, char *argv[])
       GridFunction *nodes = pmesh.GetNodes();
 
       // Get boundary dofs
-      Array<int> fsi_dofs;
-      FiniteElementSpace *fes = nodes->FESpace();
-      fes->GetEssentialTrueDofs(bdr_is_fsi,fsi_dofs);
+      ParFiniteElementSpace *pfes = dynamic_cast<ParFiniteElementSpace *>(nodes->FESpace());
+      mfem::out <<pfes<<std::endl;
+      MFEM_VERIFY(pfes, "FESpace should be a parallel");
+      pfes->GetEssentialTrueDofs(bdr_is_fsi,fsi_dofs);
       vertexSize = fsi_dofs.Size()/dim;
+
+bdr_is_fsi.Print(std::cout,888);
+fsi_dofs.Print(std::cout,888);
 
       // Get boundary coordinates
       std::vector<double>  vertices(vertexSize * dim);
       vertexIDs.resize(vertexSize);
 
-      if (fes->GetOrdering() == Ordering::byNODES)
-      {
-         for (int i = 0; i < vertexSize*dim; i++)
-         {
-            vertices.at(i) = nodes->Elem(fsi_dofs[i]);
-         }
-      }
-      else if (fes->GetOrdering() == Ordering::byVDIM)
-      {
+    //  if (pfes->GetOrdering() == Ordering::byNODES)
+    //  {
+    //     mfem::out << "Ordering::byNODES\n";
+    //     for (int i = 0; i < vertexSize*dim; i++)
+    //     {
+    //        vertices.at(i) = nodes->Elem(fsi_dofs[i]);
+    //     }
+    //  }
+      //else if (pfes->GetOrdering() == Ordering::byVDIM)
+    //  {
+         mfem::out << " Ordering::byVDIM\n";
          for (int j = 0, ii = 0; j < dim; j++)
          {
             for (int i = 0; i < vertexSize; i++)
@@ -373,15 +383,26 @@ int main(int argc, char *argv[])
                vertices.at(j + i*dim) = nodes->Elem(fsi_dofs[ii++]);
             }
          }
+     // }
+     // else
+     // {
+     //    mfem_error("Used FESpace Ordering not handled by precice init.");
+     // }
+
+         for (int i = 0; i < vertexSize; i++)
+         {
+         std::cout<<vertices[dim * i]<<" "<<vertices[dim * i + 1]<<std::endl;
       }
-      else
-      {
-         mfem_error("Used FESpace Ordering not handled by precice init.");
+
+         for (int i = 0; i < vertexSize; i++)
+         {
+         std::cout<<vertices[i]<<" "<<vertices[vertexSize +  i]<<std::endl;
       }
+
 
       // Set boundary coordinates
       precice.setMeshVertices(meshName, vertices, vertexIDs);
-   }
+  // }
 
    // Set vectors
    const int forceDim = precice.getDataDimensions(meshName,"Force");
@@ -394,7 +415,12 @@ int main(int argc, char *argv[])
 
    std::vector<double> forces(vertexSize*dim);
    std::vector<double> disp(vertexSize*dim);
-
+   std::vector<double> disp0(vertexSize*dim);
+  
+   for (int i = 0; i < disp0.size(); i++)
+   {
+       disp0[i] = 0.0;
+   }
    mfem::out<<"forceDim = "<<forces.size()<<std::endl;
    mfem::out<<"dispDim  = "<<disp .size()<<std::endl;
 
@@ -470,8 +496,10 @@ int main(int argc, char *argv[])
    ParGridFunction x_u(spaces[0]);
    ParGridFunction x_p(spaces[1]);
 
+
    Array<ParGridFunction*> dx_u(nstate);
    Array<ParGridFunction*> dx_p(nstate);
+
 
    for (int i = 0; i < nstate; i++)
    {
@@ -479,12 +507,38 @@ int main(int argc, char *argv[])
       dx_p[i] = new ParGridFunction(spaces[1]);
    }
 
+   // Mesh motion stuff
+  // ParFiniteElementSpace  *space_mm= new ParFiniteElementSpace(&pmesh, fecs[0], dim, Ordering::byVDIM);
+
+   ParGridFunction x_d(pfes); x_d = 0.0;
+   ParGridFunction x_d0(pfes); x_d0 = 0.0;
+   ParGridFunction x_um(pfes);
+   
+   Array<int> mm_bdr_dof;
+   spaces[0]->GetBoundaryTrueDofs(mm_bdr_dof);
+
+   ConstantCoefficient lambda_func(1.0);
+   ConstantCoefficient mu_func(1.0);
+
+   ParBilinearForm *a_mm = new ParBilinearForm(pfes);
+   a_mm->AddDomainIntegrator(new ElasticityIntegrator(lambda_func, mu_func));
+
+   ParLinearForm *b_mm = new ParLinearForm(pfes);
+std::cout<<"old :";
+    fsi_dofs.Print(std::cout, 8888);
+    Array<int>fsi_dofs_xd;
+  x_d.FESpace()->GetEssentialVDofs(bdr_is_fsi,fsi_dofs_xd);
+std::cout<<"new :";
+    fsi_dofs_xd.Print(std::cout, 8888);
+    
    // Define the visualisation output
    VisItDataCollection vdc("step", &pmesh);
    vdc.SetPrefixPath(vis_dir);
    vdc.RegisterField("u", &x_u);
    vdc.RegisterField("p", &x_p);
-
+   vdc.RegisterField("d", &x_d);
+  // vdc.RegisterField("d", nodes);
+   
    // Get the start vector(s) from file -- or from function
    real_t t;
    int si, ri, vi;
@@ -565,6 +619,12 @@ int main(int argc, char *argv[])
       rdc.RegisterField("dp", dx_p[0]);
    }
 
+
+
+
+
+
+
    // 7. Actual time integration
 
    // Open output file
@@ -593,6 +653,10 @@ int main(int argc, char *argv[])
       }
       os<<endl;
    }
+
+      HypreParMatrix A_mm;
+      Vector B_mm, X_mm;
+
 
    precice.initialize();
    while (precice.isCouplingOngoing())
@@ -626,24 +690,103 @@ int main(int argc, char *argv[])
                        vertexIDs,
                        0,
                        disp);
-      //Vector disp_ref(disp.data(), disp.size());
-     // disp_ref.Print(mfem::out,vertexSize);
+/* 
+std::cout<<" vertexIDs ::"<<vertexIDs.size()<<" \n";
+      for (uint i = 0; i < vertexIDs.size(); ++i)
+          std::cout<<vertexIDs[i]<<":"<<disp[2*i]<<" "<<disp[2*i+1]<<std::endl;
+ 
+std::cout<<" vertexIDs ::"<<vertexIDs.size()<<" \n";
+      for (uint i = 0; i < vertexIDs.size(); ++i)
+          std::cout<<vertexIDs[i]<<":"<<disp[i]<<" "<<disp[vertexIDs.size()+i]<<std::endl;
+*/
 
-      for (uint i = 0; i < disp.size(); ++i)
-          std::cout<<disp[i]<<" ";
-      std::cout<<std::endl;
+//std::cout<<" fsi_dofs::"<<fsi_dofs.Size()<<" :";
 
-      // Mesh motion
+      // Set FSI boundary displacement
+      x_d = 0.0;//std::cout<<" x_d zero ::";
+     // x_d.Print(std::cout,88);
+     // if (pfes->GetOrdering() == Ordering::byNODES)
+    //  {
+       //  mfem::out << " Ordering::byNODES\n";
+      //   int ii = 0;
+       //  for (int i = 0; i < vertexSize; i++)
+        // {
+         //   for (int j = 0; j < dim; j++)
+         //  {
+          //    i++;
+       //       x_d[fsi_dofs[i]] = nodes->Elem(fsi_dofs[i])
+          //  }
+            //std::cout<<nodes->Elem(fsi_dofs[i])<<" ";
+            //if (i%2 == 1)std::cout<<std::endl;
+        // }
+      //}
+     // else if (pfes->GetOrdering() == Ordering::byVDIM)
+   //   {
+         mfem::out << " Ordering::byVDIM\n";
+         for (int j = 0, ii = 0; j < dim; j++)
+         {
+            for (int i = 0; i < vertexSize; i++)
+            {
+        //    std::cout << i<<" "<<j<<" "<<disp[i]<<" "<<fsi_dofs[ii]<<std::endl;
+               x_d[fsi_dofs[ii++]] = disp[j + i*dim] - disp0[j + i*dim] ;
+               
+            }
+         }
+    //  }
+     // else
+     // {
+    //     mfem_error("Used FESpace Ordering not handled by precice init.");
+    //  }
+      /*int nnode = nodes->Size()/2;
+      for (int i = 0; i < nnode; i++)
+      {
+            for (int j = 0; j < dim; j++)
+            {
+              int xi = i + j*nnode;
+              //int xi = j + i*dim;
+             // int ni = i + j*vertexSize;
+              int ni = j + i*dim;
+              
+              x_d[xi] = nodes->Elem(ni);
+            }
+      }*/
+      
+      
+      
+      //x_d = 0.0;
+//      std::cout<<" x_d = ";
+//x_d.Print(std::cout,88);
+      // Mesh motion using linear elastisity
+      b_mm->Update();
+      a_mm->Update();
 
+      b_mm->Assemble();
+      a_mm->Assemble();
+      a_mm->FormLinearSystem(mm_bdr_dof, x_d, *b_mm, A_mm, X_mm, B_mm);
+      HypreBoomerAMG *amg = new HypreBoomerAMG(A_mm);
+      HyprePCG *pcg = new HyprePCG(A_mm);
+      pcg->SetTol(1e-8);
+      pcg->SetMaxIter(500);
+      pcg->SetPrintLevel(2);
+      pcg->SetPreconditioner(*amg);
+
+      pcg->Mult(B_mm, X_mm);
+      a_mm->RecoverFEMSolution(X_mm, *b_mm, x_d);
+      
+      disp0=disp;
+      (*nodes) += x_d;
+      
+      
       // Extract mesh velocity
-
+     
       // Navier stokes
       ode_solver->Step(xp, t, dt_used);
       t -= dt_used;
       precice.advance(dt_used);
 
       // Compute force
-
+      //xp.GetBlock(1);fsi_dofs1
+      
       // Communicate force
       precice.writeData(meshName,
                         "Force",
