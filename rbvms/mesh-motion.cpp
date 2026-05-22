@@ -172,6 +172,13 @@ void MeshMotion::SetTimeLevel(double alpha)
    add(nodes0, -alpha, pgf_d, *nodes);
 }
 
+void MeshMotion::SetVelocityBCs(Vector &x)
+{
+   for (int i = 0; i < fsi_dofs.Size(); i++)
+   {
+      x[fsi_dofs[i]] = pgf_um[fsi_dofs[i]];
+   }
+}
 
 
 //358

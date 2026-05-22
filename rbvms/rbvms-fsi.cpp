@@ -21,6 +21,7 @@
 
 #include "formulation.hpp"
 #include "integrator.hpp"
+#include "mesh-motion.hpp"
 
 using namespace std;
 using namespace mfem;
@@ -358,87 +359,8 @@ int main(int argc, char *argv[])
    // Configure precice
    precice::Participant precice(std::string(precice_solverName),
                                 std::string(precice_configFile), 0, 1); //??,rank,size);
-   const std::string meshName(precice_meshName);
-   std::vector<int>     vertexIDs;
-   int vertexSize;
-   Array<int> fsi_dofs;
-   //{
-   MFEM_VERIFY(precice.getMeshDimensions(meshName) == dim,
-               "MFEM and Precice dimension don't match!");
 
-   // Get nodes gridfunction
-   pmesh.EnsureNodes();
-   GridFunction *nodes = pmesh.GetNodes();
-
-   // Get boundary dofs
-   ParFiniteElementSpace *pfes = dynamic_cast<ParFiniteElementSpace *>
-                                 (nodes->FESpace());
-   mfem::out <<pfes<<std::endl;
-   MFEM_VERIFY(pfes, "FESpace should be a parallel");
-   pfes->GetEssentialTrueDofs(bdr_is_fsi,fsi_dofs);
-   vertexSize = fsi_dofs.Size()/dim;
-
-
-   // Get boundary coordinates
-   std::vector<double>  vertices(vertexSize * dim);
-   vertexIDs.resize(vertexSize);
-
-   if (pfes->GetOrdering() == Ordering::byNODES)
-   {
-      for (int j = 0; j < dim; j++)
-      {
-         for (int i = 0; i < vertexSize; i++)
-         {
-            vertices.at(j + i*dim) = nodes->Elem(fsi_dofs[i + j*vertexSize]);
-         }
-      }
-   }
-   else if (pfes->GetOrdering() == Ordering::byVDIM)
-   {
-      for (int i = 0; i < vertexSize; i++)
-      {
-         for (int j = 0; j < dim; j++)
-         {
-            vertices.at(j + i*dim) = nodes->Elem(fsi_dofs[i*dim + j]);
-         }
-      }
-   }
-   else
-   {
-      mfem_error("Used FESpace Ordering not handled by precice init.");
-   }
-
-   if (vertexSize == 4)
-   {
-      std::cout<<"----------------------------------------------\n";
-      for (int i = 0; i < vertexSize; i++)
-      {
-         std::cout<<vertices[dim * i]<<" "<<vertices[dim * i + 1]<<std::endl;
-      }
-   }
-
-   // Set boundary coordinates
-   precice.setMeshVertices(meshName, vertices, vertexIDs);
-
-   // Set vectors
-   //  const int forceDim = precice.getDataDimensions(meshName,"Force");
-   //  const int dispDim = precice.getDataDimensions(meshName,"Displacement");
-
-   MFEM_VERIFY(precice.getDataDimensions(meshName,"Force") == dim,
-               "MFEM and Precice dimension don't match!");
-   MFEM_VERIFY(precice.getDataDimensions(meshName,"Displacement") == dim,
-               "MFEM and Precice dimension don't match!");
-
-   std::vector<double> forces(vertexSize*dim);
-   std::vector<double> disp(vertexSize*dim);
-   std::vector<double> disp0(vertexSize*dim);
-
-   for (int i = 0; i < disp0.size(); i++)
-   {
-      disp0[i] = 0.0;
-   }
-   mfem::out<<"forceDim = "<<forces.size()<<std::endl;
-   mfem::out<<"dispDim  = "<<disp .size()<<std::endl;
+   RBVMS::MeshMotion meshMotion(precice, pmesh, precice_meshName, bdr_is_fsi);
 
    // Add fsi boundary to weak or strong
    if (fsi_strong)
@@ -496,7 +418,8 @@ int main(int argc, char *argv[])
    LibCoefficient blowing(lib_file, "blowing", false, 0.0);
 
    // Define weak form and evolution
-   RBVMS::IncNavStoIntegrator integrator(rho, mu, force, sol, suction, blowing);
+   RBVMS::IncNavStoIntegrator integrator(rho, mu, force, sol, suction, blowing,
+                                         &meshMotion.pgf_um);
    RBVMS::NavStoForm form(spaces, integrator);
    RBVMS::Evolution evo(form, newton_solver);
    ode_solver->Init(evo);
@@ -527,31 +450,12 @@ int main(int argc, char *argv[])
       dx_p[i] = new ParGridFunction(spaces[1]);
    }
 
-   // Mesh motion stuff
-   // ParFiniteElementSpace  *space_mm= new ParFiniteElementSpace(&pmesh, fecs[0], dim, Ordering::byVDIM);
-
-   ParGridFunction x_d(pfes); x_d = 0.0;
-   ParGridFunction x_d0(pfes); x_d0 = 0.0;
-   ParGridFunction x_um(pfes);
-   form.SetMeshVelocity(&x_um);
-
-   Array<int> mm_bdr_dof;
-   pfes->GetBoundaryTrueDofs(mm_bdr_dof);
-
-   PowerDetCoefficient lambda_func(1.0);
-   PowerDetCoefficient mu_func(1.0);
-
-   ParBilinearForm *a_mm = new ParBilinearForm(pfes);
-   a_mm->AddDomainIntegrator(new ElasticityIntegrator(lambda_func, mu_func));
-
-   ParLinearForm *b_mm = new ParLinearForm(pfes);
-
    // Define the visualisation output
    VisItDataCollection vdc("step", &pmesh);
    vdc.SetPrefixPath(vis_dir);
    vdc.RegisterField("u", &x_u);
    vdc.RegisterField("p", &x_p);
-   vdc.RegisterField("d", &x_d);
+   //vdc.RegisterField("d", &x_d);
 
    // Get the start vector(s) from file -- or from function
    real_t t;
@@ -692,68 +596,10 @@ int main(int argc, char *argv[])
          cout<<std::defaultfloat<<std::setprecision(4);
          line(80);
       }
-
-      precice.readData(meshName,
-                       "Displacement",
-                       vertexIDs,
-                       dt_used,
-                       disp);
-
-      // Set FSI boundary displacement
-      x_d = 0.0;
-      if (pfes->GetOrdering() == Ordering::byNODES)
-      {
-         for (int j = 0; j < dim; j++)
-         {
-            for (int i = 0; i < vertexSize; i++)
-            {
-               x_d[fsi_dofs[i + j*vertexSize]] = disp[j + i*dim] - disp0[j + i*dim] ;
-
-            }
-         }
-      }
-      else if (pfes->GetOrdering() == Ordering::byVDIM)
-      {
-         for (int i = 0; i < vertexSize; i++)
-         {
-            for (int j = 0; j < dim; j++)
-            {
-               x_d[fsi_dofs[i*dim + j]] = disp[j + i*dim] - disp0[j + i*dim] ;
-            }
-         }
-      }
-
-      b_mm->Update();
-      a_mm->Update();
-
-      b_mm->Assemble();
-      a_mm->Assemble();
-      a_mm->FormLinearSystem(mm_bdr_dof, x_d, *b_mm, A_mm, X_mm, B_mm);
-      HypreBoomerAMG *amg = new HypreBoomerAMG(A_mm);
-      amg->SetPrintLevel(0);
-      HyprePCG *pcg = new HyprePCG(A_mm);
-      pcg->SetTol(1e-8);
-      pcg->SetMaxIter(500);
-      pcg->SetPrintLevel(3);
-      pcg->SetPreconditioner(*amg);
-
-      pcg->Mult(B_mm, X_mm);
-      a_mm->RecoverFEMSolution(X_mm, *b_mm, x_d);
-
-
-      disp0=disp;
-      (*nodes) += x_d;
-
-      // Extract mesh velocity
-      x_um = x_d;
-      x_um /= dt_used;
-
+      meshMotion.Solve(dt_used);
       if (fsi_strong)
       {
-         for (int i = 0; i < fsi_dofs.Size(); i++)
-         {
-            xp.GetBlock(0)[fsi_dofs[i]] = x_um[fsi_dofs[i]];
-         }
+         meshMotion.SetVelocityBCs(xp.GetBlock(0));
       }
       else
       {
@@ -770,10 +616,10 @@ int main(int argc, char *argv[])
       //xp.GetBlock(1);fsi_dofs1
 
       // Communicate force
-      precice.writeData(meshName,
+      precice.writeData(meshMotion.meshName,
                         "Force",
-                        vertexIDs,
-                        forces);
+                        meshMotion.vertexIDs,
+                        meshMotion.forces);
 
       // Reload time dependent values
       if (precice.requiresReadingCheckpoint())

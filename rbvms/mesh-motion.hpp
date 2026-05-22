@@ -41,6 +41,7 @@ public:
 */
 class MeshMotion
 {
+public:
    precice::Participant &participant;
    ParMesh &pmesh;
 
@@ -69,9 +70,18 @@ public:
               const char *meshName,
               Array<int> bdr_is_fsi);
 
+
+   // ParGridFunction *GetMotion(){ return *pgf_d;};
+   //ParGridFunction *GetVelocity(){ return *pgf_um;};
+
+   ParGridFunction &GetMotion() { return pgf_d;};
+   ParGridFunction &GetVelocity() { return pgf_um;};
+
    void Solve(double dt);
 
    void SetTimeLevel(double alpha);
+
+   void SetVelocityBCs(Vector &x);
 };
 
 
