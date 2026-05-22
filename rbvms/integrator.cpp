@@ -26,6 +26,8 @@ IncNavStoIntegrator::IncNavStoIntegrator(Coefficient &rho,
    dudt.SetSize(dim);
    f.SetSize(dim);
    res_m.SetSize(dim);
+   uc.SetSize(dim);
+   um.SetSize(dim); um = 0.0;
    up.SetSize(dim);
    traction.SetSize(dim);
    grad_u.SetSize(dim);
@@ -64,7 +66,7 @@ void IncNavStoIntegrator::SetMeshVelocity(ParGridFunction *mv)
 
 // Compute RBVMS stabilisation parameters
 void IncNavStoIntegrator::GetTau(real_t &tau_m, real_t &tau_c, real_t &cfl2,
-                                 real_t& rho, real_t &mu, Vector &u,
+                                 real_t& rho, real_t &mu, Vector &u_,
                                  ElementTransformation &T)
 {
    real_t Cd = 6.0;
@@ -80,10 +82,10 @@ void IncNavStoIntegrator::GetTau(real_t &tau_m, real_t &tau_c, real_t &cfl2,
    tau_c = 0.0;
    for (int j = 0; j < dim; j++)
    {
-      real_t uj = u[j];
+      real_t uj = u_[j];
       for (int i = 0; i < dim; i++)
       {
-         tau_c += Gij(i,j)*u[i]*uj;
+         tau_c += Gij(i,j)*u_[i]*uj;
       }
    }
    cfl2 = tau_c/tau_m;
@@ -188,13 +190,13 @@ real_t IncNavStoIntegrator::GetElemArtDiff(const Array<const FiniteElement *>
 
 // Compute Weak Dirichlet stabilisation parameters
 void IncNavStoIntegrator::GetTauB(real_t &tau_b, real_t &tau_n,
-                                  real_t &mu, Vector &u,
-                                  Vector &nor,
+                                  real_t &mu, Vector &u_,
+                                  Vector &nor_,
                                   FaceElementTransformations &Tr)
 {
    real_t Cb = 12.0;
 
-   Tr.Elem1->InverseJacobian().Mult(nor,hn);
+   Tr.Elem1->InverseJacobian().Mult(nor_,hn);
    tau_b = Cb*mu*hn.Norml2();
    tau_n = 100.0;
 }
@@ -276,6 +278,7 @@ void IncNavStoIntegrator::AssembleElementVector(
    sh_u.SetSize(dof_u);
    shg_u.SetSize(dof_u, dim);
    ushg_u.SetSize(dof_u);
+   umshg_u.SetSize(dof_u);
    shh_u.SetSize(dof_u, (dim*(dim+1))/2);
    sh_p.SetSize(dof_p);
    shg_p.SetSize(dof_p, dim);
@@ -297,13 +300,25 @@ void IncNavStoIntegrator::AssembleElementVector(
       real_t mu_eff = mu + mu_ad;
       c_force.Eval(f, Tr, ip);
 
+      if (meshVel)
+      {
+         meshVel->GetVectorValue(Tr, ip, um);
+      }
+      else
+      {
+         um = 0.0;
+      }
+      //um.Print();
+
       // Compute shape and interpolate
       el[0]->CalcPhysShape(Tr, sh_u);
       elf_u.MultTranspose(sh_u, u);
+      add(u, -1.0, um, uc);
       elf_du.MultTranspose(sh_u, dudt);
 
       el[0]->CalcPhysDShape(Tr, shg_u);
       shg_u.Mult(u, ushg_u);
+      shg_u.Mult(um, umshg_u);
 
       el[1]->CalcPhysShape(Tr, sh_p);
       real_t p = sh_p*(*elsol[1]);
@@ -313,7 +328,7 @@ void IncNavStoIntegrator::AssembleElementVector(
 
       // Compute strong residual
       MultAtB(elf_u, shg_u, grad_u);
-      grad_u.Mult(u,res_m);   // Add convection
+      grad_u.Mult(uc,res_m);  // Add convection
       res_m += dudt;          // Add acceleration
       res_m *= rho;
       res_m += grad_p;        // Add pressure
@@ -323,12 +338,12 @@ void IncNavStoIntegrator::AssembleElementVector(
       {
          el[0]->CalcPhysHessian(Tr,shh_u);
          MultAtB(elf_u, shh_u, hess_u);
-         for (int i = 0; i < dim; ++i)
+         for (int ii = 0; ii < dim; ++ii)
          {
-            for (int j = 0; j < dim; ++j)
+            for (int jj = 0; jj < dim; ++jj)
             {
-               res_m[j] -= mu*(hess_u(j,hmap(i,i)) +
-                               hess_u(i,hmap(j,i)));
+               res_m[jj] -= mu*(hess_u(jj,hmap(ii,ii)) +
+                                hess_u(ii,hmap(jj,ii)));
             }
          }
       }
@@ -340,7 +355,7 @@ void IncNavStoIntegrator::AssembleElementVector(
       real_t res_c = grad_u.Trace();
 
       // Compute stability params
-      GetTau(tau_m, tau_c, cfl2, rho, mu, u, Tr);
+      GetTau(tau_m, tau_c, cfl2, rho, mu, uc, Tr);
       elem_cfl = fmax(elem_cfl, cfl2);
 
       // Small scale reconstruction
@@ -349,13 +364,14 @@ void IncNavStoIntegrator::AssembleElementVector(
       p -= tau_c*res_c;
 
       // Compute momentum weak residual
-      flux.Diag(-p, dim);                         // Add pressure
+      flux.Diag(-p, dim);                         // Add pressure to flux
       grad_u.Symmetrize();                        // Grad to strain
       flux.Add(2*mu_eff,grad_u);                  // Add stress to flux
       AddMult_a_VVt(-rho, u, flux);               // Add convection to flux
       AddMult_a_ABt(w, shg_u, flux, elv_u);       // Add flux term to rhs
       f.Add(-rho, dudt);                          // Add Acceleration to force
-      AddMult_a_VWt(-w, sh_u, f, elv_u);          // Add force + acc term to rhs
+      grad_u.AddMult(uc,f);                       // Add mesh motion
+      AddMult_a_VWt(-w, sh_u, f, elv_u);          // Add force + acc + mm terms to rhs
 
       // Compute continuity weak residual
       elvec[1]->Add(-w*res_c, sh_p);              // Add Galerkin term
@@ -399,7 +415,8 @@ void IncNavStoIntegrator::AssembleElementGrad(
 
    DenseMatrix mat_wu1(dof_u, dof_u);
    mat_wu1 = 0.0;
-   DenseMatrix mat_wp1[dim], mat_qu1[dim], mat_up[dim];
+   constexpr int dim_ = 2;
+   DenseMatrix mat_wp1[dim_], mat_qu1[dim_], mat_up[dim_];
    for (int i_dim = 0; i_dim < dim; ++i_dim)
    {
       mat_wp1[i_dim].SetSize(dof_u,dof_p);
@@ -411,7 +428,7 @@ void IncNavStoIntegrator::AssembleElementGrad(
    }
 
    int dim2 = (dim*(dim+1))/2;
-   DenseMatrix  mat_uu[dim*dim];
+   DenseMatrix  mat_uu[dim_*dim_];
    for (int i_dim = 0; i_dim < dim2; ++i_dim)
    {
       mat_uu[i_dim].SetSize(dof_u,dof_u);
@@ -423,6 +440,7 @@ void IncNavStoIntegrator::AssembleElementGrad(
    sh_u.SetSize(dof_u);
    shg_u.SetSize(dof_u, dim);
    ushg_u.SetSize(dof_u);
+   umshg_u.SetSize(dof_u);
    dupdu.SetSize(dof_u);
    sh_p.SetSize(dof_p);
    shg_p.SetSize(dof_p, dim);
@@ -445,8 +463,14 @@ void IncNavStoIntegrator::AssembleElementGrad(
       real_t mu = c_mu.Eval(Tr, ip);
       //real_t mu_eff = mu + mu_ad;
 
+      if (meshVel)
+      {
+         meshVel->GetVectorValue(Tr, ip, um);
+      }
+
       el[0]->CalcPhysShape(Tr, sh_u);
       elf_u.MultTranspose(sh_u, u);
+      add(u, -1.0, um, uc);
       elf_du.MultTranspose(sh_u, dudt);
 
       el[0]->CalcPhysDShape(Tr, shg_u);
@@ -455,29 +479,29 @@ void IncNavStoIntegrator::AssembleElementGrad(
       shg_u.Mult(u, ushg_u);
 
       el[1]->CalcPhysShape(Tr, sh_p);
-      real_t p = sh_p*(*elsol[1]);
+      //  real_t p = sh_p*(*elsol[1]);
 
       el[1]->CalcPhysDShape(Tr, shg_p);
       shg_p.MultTranspose(*elsol[1], grad_p);
 
       // Compute strong residual
       MultAtB(elf_u, shg_u, grad_u);
-      grad_u.Mult(u,res_m);   // Add convection
-      res_m += dudt;          // Add acceleration
+      grad_u.Mult(uc,res_m);   // Add convection
+      res_m += dudt;           // Add acceleration
       res_m *= rho;
-      res_m += grad_p;        // Add pressure
-      res_m -= f;             // Subtract force
+      res_m += grad_p;         // Add pressure
+      res_m -= f;              // Subtract force
 
-      if (hess)               // Add diffusion
+      if (hess)                // Add diffusion
       {
          el[0]->CalcPhysHessian(Tr,shh_u);
          MultAtB(elf_u, shh_u, hess_u);
-         for (int i = 0; i < dim; ++i)
+         for (int ii = 0; ii < dim; ++ii)
          {
-            for (int j = 0; j < dim; ++j)
+            for (int jj = 0; jj < dim; ++jj)
             {
-               res_m[j] -= mu*(hess_u(j,hmap(i,i)) +
-                               hess_u(i,hmap(j,i)));
+               res_m[jj] -= mu*(hess_u(jj,hmap(ii,ii)) +
+                                hess_u(ii,hmap(jj,ii)));
             }
          }
       }
@@ -488,7 +512,7 @@ void IncNavStoIntegrator::AssembleElementGrad(
       }
 
       // Compute stability params
-      GetTau(tau_m, tau_c, cfl2, rho, mu, u, Tr);
+      GetTau(tau_m, tau_c, cfl2, rho, mu, uc, Tr);
 
       // Small scale reconstruction
       up.Set(-tau_m,res_m);
@@ -513,6 +537,10 @@ void IncNavStoIntegrator::AssembleElementGrad(
       // Convection terms
       AddMult_a_VWt(-dt*rho*w, ushg_u, sh_u, mat_wu1);
       AddMult_a_VWt(-rho*w, ushg_u, dupdu, mat_wu1);
+
+      // Mesh motion terms
+      AddMult_a_VWt(dt*rho*w, umshg_u, sh_u, mat_wu1);
+      AddMult_a_VWt(rho*w, umshg_u, dupdu, mat_wu1);
 
       // Diffusion term
       AddMult_a_AAt(w*mu*dt, shg_u, mat_wu1);
@@ -595,7 +623,8 @@ void IncNavStoIntegrator
    elv_u.UseExternalData(elvec[0]->GetData(), dof_u, dim);
 
    sh_u.SetSize(dof_u);
-   Vector traction(dim);
+   // Vector
+   traction.SetSize(dim);
    int intorder = 2*el1[0]->GetOrder();
    const IntegrationRule &ir = IntRules.Get(Tr.GetGeometryType(), intorder);
    for (int i = 0; i < ir.GetNPoints(); i++)
@@ -631,7 +660,7 @@ void IncNavStoIntegrator
    }
 }
 
-// Assemble the outflow boundary gradient matrices
+// Assemble the outflow boundary gradient matrice
 void IncNavStoIntegrator
 ::AssembleOutflowGrad(const Array<const FiniteElement *>&el1,
                       const Array<const FiniteElement *>&el2,
@@ -642,7 +671,7 @@ void IncNavStoIntegrator
                       bool suction)
 {
    int dof_u = el1[0]->GetDof();
-   int dof_p = el1[1]->GetDof();
+   //int dof_p = el1[1]->GetDof();
 
    elf_u.UseExternalData(elsol[0]->GetData(), dof_u, dim);
    elf_du.UseExternalData(elrate[0]->GetData(), dof_u, dim);
@@ -935,7 +964,7 @@ void IncNavStoIntegrator
 
       for (int j_u = 0; j_u < dof_u; ++j_u)
       {
-         real_t tmp0 = sh_u(j_u)*w*dt*tau_n;
+         tmp0 = sh_u(j_u)*w*dt*tau_n;
          for (int j_dim = 0; j_dim < dim; ++j_dim)
          {
             real_t tmp1 = tmp0*nor(j_dim);
@@ -955,7 +984,7 @@ void IncNavStoIntegrator
       // Momentum - Pressure block (w,p)
       for (int i_p = 0; i_p < dof_p; ++i_p)
       {
-         real_t tmp0 = sh_p(i_p)*w;
+         tmp0 = sh_p(i_p)*w;
          for (int dim_u = 0; dim_u < dim; ++dim_u)
          {
             real_t tmp1 = nor(dim_u)*tmp0;
@@ -969,7 +998,7 @@ void IncNavStoIntegrator
       // Continuity - Velocity block (q,u)
       for (int dim_u = 0; dim_u < dim; ++dim_u)
       {
-         real_t tmp0 = nor(dim_u)*w*dt;
+         tmp0 = nor(dim_u)*w*dt;
          for (int j_u = 0; j_u < dof_u; ++j_u)
          {
             real_t tmp1 = sh_u(j_u)*tmp0;

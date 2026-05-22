@@ -44,14 +44,14 @@ private:
    Array2D<int> hmap;
 
    /// Physical values
-   Vector u, dudt, f, grad_p, res_m, up, nor, traction;
+   Vector u, dudt, f, grad_p, res_m, um, uc, up, nor, traction;
    DenseMatrix flux;
 
    /// Solution & Residual vector
    DenseMatrix elf_u, elf_du, elv_u;
 
    /// Shape function data
-   Vector sh_u, ushg_u, sh_p, dupdu;
+   Vector sh_u, ushg_u, umshg_u, sh_p, dupdu;
    DenseMatrix shg_u, shh_u, shg_p, grad_u, hess_u;
 
    /// Compute RBVMS stabilisation parameters

@@ -38,8 +38,6 @@ private:
    Array<int> suctionBdr;
    Array<int> blowingBdr;
 
-   ParGridFunction *meshVel;
-
    /// Solution & Residual vector
    mutable Vector xs0;
    mutable BlockVector dxs;
@@ -54,7 +52,7 @@ public:
    NavStoForm(Array<ParFiniteElementSpace *> &pfes,
               RBVMS::IncNavStoIntegrator &integ)
       : ParTimeDepBlockNonlinForm(pfes), integrator(integ),
-        meshVel(nullptr), hasGrad(false) {};
+        hasGrad(false) {};
 
    void SetStrongBC (Array<int> strong_bdr);
    void SetWeakBC   (Array<int> weak_bdr);
