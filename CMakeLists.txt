@@ -126,6 +126,7 @@ if (DEFINED MFEM_DIR)
    add_subdirectory(util)
    add_subdirectory(rbvms)
    add_subdirectory(rbvms-ls)
+   add_subdirectory(vvp_NS_mm)
 
 #-------------------------------------------------------------------------------
 # If no MFEM_DIR is given --> build a local version here
@@ -174,6 +175,7 @@ else()
                                   -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}
                                   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
                                   -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
+                                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
                        SOURCE_DIR ${PROJECT_SOURCE_DIR}/mfem
                        BINARY_DIR ${PROJECT_BINARY_DIR}/mfem)
 
