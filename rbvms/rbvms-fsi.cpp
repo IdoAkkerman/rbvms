@@ -216,7 +216,8 @@ int main(int argc, char *argv[])
    // 3. Read the mesh from the given mesh file.
    Mesh mesh(mesh_file, 1, 1);
    int dim = mesh.Dimension();
-   int ordering = Ordering::byVDIM; //Ordering::byNODES
+   //int ordering = Ordering::byVDIM;
+   int ordering =Ordering::byNODES;
    mesh.SetCurvature(1, false, -1, ordering);
 
    // Refine mesh
@@ -384,7 +385,7 @@ int main(int argc, char *argv[])
 
    if (pfes->GetOrdering() == Ordering::byNODES)
    {
-      for (int j = 0, ii = 0; j < dim; j++)
+      for (int j = 0; j < dim; j++)
       {
          for (int i = 0; i < vertexSize; i++)
          {
@@ -420,8 +421,8 @@ int main(int argc, char *argv[])
    precice.setMeshVertices(meshName, vertices, vertexIDs);
 
    // Set vectors
-   const int forceDim = precice.getDataDimensions(meshName,"Force");
-   const int dispDim = precice.getDataDimensions(meshName,"Displacement");
+   //  const int forceDim = precice.getDataDimensions(meshName,"Force");
+   //  const int dispDim = precice.getDataDimensions(meshName,"Displacement");
 
    MFEM_VERIFY(precice.getDataDimensions(meshName,"Force") == dim,
                "MFEM and Precice dimension don't match!");
@@ -603,7 +604,7 @@ int main(int argc, char *argv[])
    {
       // Define initial condition from file
       t = 0.0; si = 0; ri = 1; vi = 1;
-      LibVectorCoefficient sol(dim, lib_file, "sol_u");
+      //LibVectorCoefficient sol(dim, lib_file, "sol_u");
       sol.SetTime(-1.0);
       x_u.ProjectCoefficient(sol);
       x_p = 0.0;
@@ -674,7 +675,7 @@ int main(int argc, char *argv[])
          // IA TBD      data_container.save_old_state(vertices, theta, theta_dot, time);
          xp0 = xp; // Correct???
       }
-
+      xp0 = xp;//
       double precice_dt = precice.getMaxTimeStepSize();
       double dt_used = std::min(dt, precice_dt);
       // Print header
