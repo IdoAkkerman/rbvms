@@ -16,9 +16,10 @@ IncNavStoIntegrator::IncNavStoIntegrator(Coefficient &rho,
                                          VectorCoefficient &force,
                                          VectorCoefficient &sol,
                                          Coefficient &suction,
-                                         Coefficient &blowing)
+                                         Coefficient &blowing,
+                                         ParGridFunction *mv)
    : c_rho(rho), c_mu(mu), c_force(force), c_sol(sol),
-     c_suction(suction), c_blowing(blowing)
+     c_suction(suction), c_blowing(blowing), meshVel(mv)
 {
    dim = force.GetVDim();
    u.SetSize(dim);
@@ -54,6 +55,11 @@ IncNavStoIntegrator::IncNavStoIntegrator(Coefficient &rho,
    {
       mfem_error("Only implemented for 2D and 3D");
    }
+}
+
+void IncNavStoIntegrator::SetMeshVelocity(ParGridFunction *mv)
+{
+   meshVel = mv;
 }
 
 // Compute RBVMS stabilisation parameters

@@ -31,6 +31,9 @@ private:
    Coefficient &c_suction;
    Coefficient &c_blowing;
 
+   // Mesh motion
+   ParGridFunction *meshVel;
+
    /// Numerical parameters
    real_t dt = -1.0;
    DenseMatrix Gij;
@@ -69,7 +72,10 @@ public:
                        VectorCoefficient &force_,
                        VectorCoefficient &sol_,
                        Coefficient &suction_,
-                       Coefficient &blowing_);
+                       Coefficient &blowing_,
+                       ParGridFunction *mv = nullptr);
+
+   void SetMeshVelocity(ParGridFunction *mv);
 
    /// Set the timestep size @a dt_
    void SetTimeAndStep(const real_t &t, const real_t &dt_)
