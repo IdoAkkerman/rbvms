@@ -49,26 +49,6 @@ void CheckBoundaries(Array<bool> &bnd_flags,
    }
 }
 
-
-/// A coefficient that is constant across space and time
-class PowerDetCoefficient : public Coefficient
-{
-public:
-   real_t power;
-
-   /// c is value of constant function
-   explicit PowerDetCoefficient(real_t p = 1.0) { power=p; }
-
-   /// Evaluate the coefficient at @a ip.
-   real_t Eval(ElementTransformation &T,
-               const IntegrationPoint &ip) override
-   {
-      return std::pow(T.Weight(), -power);
-   }
-};
-
-
-
 int main(int argc, char *argv[])
 {
    // 1. Initialize MPI and HYPRE and print info
