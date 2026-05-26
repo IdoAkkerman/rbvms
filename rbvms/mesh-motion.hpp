@@ -64,6 +64,8 @@ public:
    ParBilinearForm *a;
    Vector nodes0;
 
+   ParLinearForm *f;
+
 public:
    MeshMotion(precice::Participant &part,
               ParMesh &pmesh,
@@ -82,6 +84,8 @@ public:
    void SetTimeLevel(double alpha);
 
    void SetVelocityBCs(Vector &x);
+
+   void SetForce(Vector &x);
 };
 
 

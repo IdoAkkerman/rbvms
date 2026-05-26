@@ -91,9 +91,9 @@ MeshMotion::MeshMotion(precice::Participant &part,
    a = new ParBilinearForm(pfes);
    a->AddDomainIntegrator(new ElasticityIntegrator(lambda_func, mu_func));
 
-   //b = new ParLinearForm(pfes);
+   f = new ParLinearForm(pfes);
+   //  f->AddBdrFaceIntegrator(new EvalTraction(), bdr_is_fsi);
 }
-
 
 void MeshMotion::Solve(real_t dt)
 {
@@ -177,3 +177,28 @@ void MeshMotion::SetVelocityBCs(Vector &x)
    }
 }
 
+void MeshMotion::SetForce(Vector &f)
+{
+   if (pfes->GetOrdering() == Ordering::byNODES)
+   {
+      for (int j = 0; j < dim; j++)
+      {
+         for (int i = 0; i < vertexSize; i++)
+         {
+            forces[j + i*dim] = f[fsi_dofs[i + j*vertexSize]];
+         }
+      }
+   }
+   else if (pfes->GetOrdering() == Ordering::byVDIM)
+   {
+      for (int i = 0; i < vertexSize; i++)
+      {
+         for (int j = 0; j < dim; j++)
+         {
+            forces[j + i*dim] = f[fsi_dofs[i*dim + j]];
+         }
+      }
+   }
+
+
+}
