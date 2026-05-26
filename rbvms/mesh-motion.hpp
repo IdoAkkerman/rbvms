@@ -86,13 +86,24 @@ public:
    void SetVelocityBCs(Vector &x);
 
    void SetForce(Vector &x);
+
+
+
 };
 
+class ForceExtraction: public ParGridFunction
+{
+public:
 
+   Array<ParFiniteElementSpace *> spaces;
+   Array<int> bdr_is_fsi;
+   Coefficient &c_mu;
 
+   ForceExtraction (Array<ParFiniteElementSpace *> spaces,
+                    Array<int> bdr_is_fsi, Coefficient &mu);
 
-
-
+   void ComputeBoundaryForce(BlockVector &xp);
+};
 } // namespace RBVMS
 
 #endif
