@@ -197,8 +197,8 @@ int main(int argc, char *argv[])
    // 3. Read the mesh from the given mesh file.
    Mesh mesh(mesh_file, 1, 1);
    int dim = mesh.Dimension();
-   //int ordering = Ordering::byVDIM;
-   int ordering =Ordering::byNODES;
+   int ordering = Ordering::byVDIM;
+   // int ordering =Ordering::byNODES;
    mesh.SetCurvature(1, false, -1, ordering);
 
    // Refine mesh
@@ -546,10 +546,6 @@ int main(int argc, char *argv[])
       os<<endl;
    }
 
-   HypreParMatrix A_mm;
-   Vector B_mm, X_mm;
-
-
    precice.initialize();
    while (precice.isCouplingOngoing())
    {
@@ -581,26 +577,131 @@ int main(int argc, char *argv[])
       {
          meshMotion.SetVelocityBCs(xp.GetBlock(0));
       }
-      else
-      {
-         // WEAK TBD
-      }
 
       // Navier stokes
-      precice.advance(dt_used);
       ode_solver->Step(xp, t, dt_used);
       t -= dt_used;
 
-
       // Compute force
       //xp.GetBlock(1);fsi_dofs1
+      //   Vector forceGlb(xp.GetBlock(0).Size());
+      ParGridFunction forceGlb(spaces[0]);
+      forceGlb = 0.0;
+      Array<int> vdofs0, vdofs1;
+      Vector el_u, el_p;
+      Vector nor(dim);
+      std::cout<<"   pmesh.GetNBE() "<< pmesh.GetNBE()<<std::endl;
+      for (int i = 0; i < pmesh.GetNBE(); i++)
+      {
+         const int bdr_attr = pmesh.GetBdrAttribute(i);
+         // if (bdr_attr_marker[bdr_attr-1] == 0) { continue; }
+         //std::cout<<bdr_attr<<"  --> "<<bdr_is_fsi[bdr_attr]<<std::endl;
+         if (bdr_is_fsi[bdr_attr-1] == 0) { continue; }
 
+         // ElementTransformation *T;
+         FaceElementTransformations *Tr = pmesh.GetBdrFaceTransformations(i);
+         if (Tr == NULL) { continue; }
+         const FiniteElement &el0 = *spaces[0] ->GetFE(Tr->Elem1No);
+         const FiniteElement &el1 = *spaces[1] ->GetFE(Tr->Elem1No);
+         spaces[0] -> GetElementVDofs (Tr -> Elem1No, vdofs0);
+         spaces[1] -> GetElementVDofs (Tr -> Elem1No, vdofs1);
+
+         xp.GetBlock(0).GetSubVector(vdofs0, el_u);
+         xp.GetBlock(1).GetSubVector(vdofs1, el_p);
+         const IntegrationRule *ir = &IntRules.Get(Tr->GetGeometryType(),
+                                                   2*el0.GetOrder());
+
+         int dof_u = el0.GetDof();
+         int dof_p = el1.GetDof();
+
+
+         Vector elemvect(dof_u*dim); elemvect = 0.0;
+
+         /// Solution & Residual vector
+         DenseMatrix elf_u, elv_u;
+         elf_u.UseExternalData(el_u.GetData(), dof_u, dim);
+         elv_u.UseExternalData(elemvect.GetData(), dof_u, dim);
+
+         /// Shape function data
+         Vector  sh_u(dof_u),sh_p(dof_p), traction(dim);
+         DenseMatrix shg_u(dof_u, dim), grad_u(dim,dim);
+
+
+         for (int p = 0; p < ir->GetNPoints(); p++)
+         {
+            const IntegrationPoint &ip = ir->IntPoint(p);
+            Tr->SetAllIntPoints(&ip);
+
+            // Access the neighboring element's integration point
+            const IntegrationPoint &eip = Tr->GetElement1IntPoint();
+
+            real_t mu_val = mu.Eval(*Tr->Elem1, eip);
+            real_t w = ip.weight * Tr->Weight();
+            //std::cout<<mu_val<<" "<<w<<std::endl;
+            CalcOrtho(Tr->Jacobian(), nor);
+            nor /= nor.Norml2();
+            el0.CalcPhysShape(*Tr->Elem1, sh_u);
+            el0.CalcPhysDShape(*Tr->Elem1, shg_u);
+            MultAtB(elf_u, shg_u, grad_u);
+            grad_u.Symmetrize();           // Grad to strain
+
+            el1.CalcPhysShape(*Tr->Elem1, sh_p);
+            real_t pressure = sh_p*el_p;
+
+            // Traction
+            grad_u.Mult(nor, traction);
+            traction *= -2*mu_val;                // Consistency
+            traction.Add(pressure, nor);          // Pressure
+            //std::cout<<w<<std::endl;
+            //               sh_u.Print();
+            //    traction.Print();
+
+
+            AddMult_a_VWt(w, sh_u, traction, elv_u);// ??
+            /*
+             for (int ii = 0; ii < dof_u; ii++)
+             {
+                for (int jj = 0; jj < dim; jj++)
+                {
+               // std::cout<<ii<<" "<<jj<<"::";
+               // std::cout<<w<<" "<<sh_u[ii]<<" "<<traction[jj]<<"::";
+                //   elv_u(ii,jj) += w*sh_u[ii]*traction[jj];
+             // std::cout<< elemvect[ii*dim + jj]<<" "<<w*sh_u[ii]*traction[jj]<<"::";
+
+                   elemvect[ii*dim+ jj]+= w*sh_u[ii]*traction[jj];
+                            // std::cout<< elemvect[ii*dim + jj]<<std::endl;
+                }
+             }
+            for (int ii = 0; ii < dof_u; ii++)
+             {
+                for (int jj = 0; jj < dim; jj++)
+                {
+
+                             std::cout<< elemvect[ii*dim + jj]<<std::endl;
+                }
+             }
+
+            elemvect.Print(std::cout,7777);*/
+
+
+         }
+         forceGlb.AddElementVector (vdofs0, elemvect);
+
+      }
+      meshMotion.SetForce(forceGlb);
+      forceGlb.Print(std::cout,666666);
+      meshMotion.fsi_dofs.Print(std::cout,666666);
+      for (int ii = 0; ii < meshMotion.forces.size(); ii++)
+      {
+         std::cout<< meshMotion.forces[ii]<<std::endl;
+      }
+      //meshMotion.forces.Print();
       // Communicate force
       precice.writeData(meshMotion.meshName,
                         "Force",
                         meshMotion.vertexIDs,
                         meshMotion.forces);
-
+      precice.advance(dt_used);
       // Reload time dependent values
       if (precice.requiresReadingCheckpoint())
       {
