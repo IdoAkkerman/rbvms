@@ -585,104 +585,16 @@ int main(int argc, char *argv[])
       t -= dt_used;
 
       // Compute force
-      /*      //xp.GetBlock(1);fsi_dofs1
-            //   Vector forceGlb(xp.GetBlock(0).Size());
-            ParGridFunction forceGlb(spaces[0]);
-            forceGlb = 0.0;
-            Array<int> vdofs0, vdofs1;
-            Vector el_u, el_p;
-            Vector nor(dim);
-            std::cout<<"   pmesh.GetNBE() "<< pmesh.GetNBE()<<std::endl;
-            for (int i = 0; i < pmesh.GetNBE(); i++)
-            {
-               const int bdr_attr = pmesh.GetBdrAttribute(i);
-               // if (bdr_attr_marker[bdr_attr-1] == 0) { continue; }
-               //std::cout<<bdr_attr<<"  --> "<<bdr_is_fsi[bdr_attr]<<std::endl;
-               if (bdr_is_fsi[bdr_attr-1] == 0) { continue; }
-
-               // ElementTransformation *T;
-               FaceElementTransformations *Tr = pmesh.GetBdrFaceTransformations(i);
-               if (Tr == NULL) { continue; }
-               const FiniteElement &el0 = *spaces[0] ->GetFE(Tr->Elem1No);
-               const FiniteElement &el1 = *spaces[1] ->GetFE(Tr->Elem1No);
-               spaces[0] -> GetElementVDofs (Tr -> Elem1No, vdofs0);
-               spaces[1] -> GetElementVDofs (Tr -> Elem1No, vdofs1);
-
-               xp.GetBlock(0).GetSubVector(vdofs0, el_u);
-               xp.GetBlock(1).GetSubVector(vdofs1, el_p);
-               const IntegrationRule *ir = &IntRules.Get(Tr->GetGeometryType(),
-                                                         2*el0.GetOrder());
-
-               int dof_u = el0.GetDof();
-               int dof_p = el1.GetDof();
-
-
-               Vector elemvect(dof_u*dim); elemvect = 0.0;
-
-               /// Solution & Residual vector
-               DenseMatrix elf_u, elv_u;
-               elf_u.UseExternalData(el_u.GetData(), dof_u, dim);
-               elv_u.UseExternalData(elemvect.GetData(), dof_u, dim);
-
-               /// Shape function data
-               Vector  sh_u(dof_u),sh_p(dof_p), traction(dim);
-               DenseMatrix shg_u(dof_u, dim), grad_u(dim,dim);
-
-
-               for (int p = 0; p < ir->GetNPoints(); p++)
-               {
-                  const IntegrationPoint &ip = ir->IntPoint(p);
-                  Tr->SetAllIntPoints(&ip);
-
-                  // Access the neighboring element's integration point
-                  const IntegrationPoint &eip = Tr->GetElement1IntPoint();
-
-                  real_t mu_val = mu.Eval(*Tr->Elem1, eip);
-                  real_t w = ip.weight * Tr->Weight();
-                  //std::cout<<mu_val<<" "<<w<<std::endl;
-                  CalcOrtho(Tr->Jacobian(), nor);
-                  nor /= nor.Norml2();
-                  el0.CalcPhysShape(*Tr->Elem1, sh_u);
-                  el0.CalcPhysDShape(*Tr->Elem1, shg_u);
-                  MultAtB(elf_u, shg_u, grad_u);
-                  grad_u.Symmetrize();           // Grad to strain
-
-                  el1.CalcPhysShape(*Tr->Elem1, sh_p);
-                  real_t pressure = sh_p*el_p;
-
-                  // Traction
-                  grad_u.Mult(nor, traction);
-                  traction *= -2*mu_val;                // Consistency
-                  traction.Add(pressure, nor);          // Pressure
-                  //std::cout<<w<<std::endl;
-                  //               sh_u.Print();
-                  //    traction.Print();
-
-
-                  AddMult_a_VWt(w, sh_u, traction, elv_u);// ??
-
-
-
-               }
-               forceGlb.AddElementVector (vdofs0, elemvect);
-
-            }*/
-
       pgf_force.ComputeBoundaryForce(xp);
       meshMotion.SetForce(pgf_force);
-      pgf_force.Print(std::cout,666666);
-      meshMotion.fsi_dofs.Print(std::cout,666666);
-      for (int ii = 0; ii < meshMotion.forces.size(); ii++)
-      {
-         std::cout<< meshMotion.forces[ii]<<std::endl;
-      }
-      //meshMotion.forces.Print();
+
       // Communicate force
       precice.writeData(meshMotion.meshName,
                         "Force",
                         meshMotion.vertexIDs,
                         meshMotion.forces);
       precice.advance(dt_used);
+
       // Reload time dependent values
       if (precice.requiresReadingCheckpoint())
       {
