@@ -31,6 +31,9 @@ private:
    Coefficient &c_suction;
    Coefficient &c_blowing;
 
+   // Mesh motion
+   ParGridFunction *meshVel;
+
    /// Numerical parameters
    real_t dt = -1.0;
    DenseMatrix Gij;
@@ -41,14 +44,14 @@ private:
    Array2D<int> hmap;
 
    /// Physical values
-   Vector u, dudt, f, grad_p, res_m, up, nor, traction;
+   Vector u, dudt, f, grad_p, res_m, um, uc, up, nor, traction;
    DenseMatrix flux;
 
    /// Solution & Residual vector
    DenseMatrix elf_u, elf_du, elv_u;
 
    /// Shape function data
-   Vector sh_u, ushg_u, sh_p, dupdu;
+   Vector sh_u, ushg_u, umshg_u, sh_p, dupdu;
    DenseMatrix shg_u, shh_u, shg_p, grad_u, hess_u;
 
    /// Compute RBVMS stabilisation parameters
@@ -69,7 +72,10 @@ public:
                        VectorCoefficient &force_,
                        VectorCoefficient &sol_,
                        Coefficient &suction_,
-                       Coefficient &blowing_);
+                       Coefficient &blowing_,
+                       ParGridFunction *mv = nullptr);
+
+   void SetMeshVelocity(ParGridFunction *mv);
 
    /// Set the timestep size @a dt_
    void SetTimeAndStep(const real_t &t, const real_t &dt_)

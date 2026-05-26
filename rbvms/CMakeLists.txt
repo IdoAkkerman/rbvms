@@ -9,11 +9,13 @@
 #-------------------------------------------------------------------------------
 set(SOURCES
     formulation.cpp
-    integrator.cpp)
+    integrator.cpp
+    mesh-motion.cpp)
 
 set(HEADERS
     formulation.hpp
-    integrator.hpp)
+    integrator.hpp
+    mesh-motion.hpp)
 
 #-------------------------------------------------------------------------------
 # Build executable

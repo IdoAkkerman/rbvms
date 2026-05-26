@@ -430,7 +430,7 @@ int main(int argc, char *argv[])
    {
       // Define initial condition from file
       t = 0.0; si = 0; ri = 1; vi = 1;
-      LibVectorCoefficient sol(dim, lib_file, "sol_u");
+      //LibVectorCoefficient sol(dim, lib_file, "sol_u");
       sol.SetTime(-1.0);
       x_u.ProjectCoefficient(sol);
       x_p = 0.0;

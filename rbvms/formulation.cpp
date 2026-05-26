@@ -64,6 +64,13 @@ void NavStoForm::SetBlowingBC(Array<int> blowing_bdr)
    blowing_bdr.Copy(blowingBdr);
 }
 
+// Set the mesh velocity
+void NavStoForm::SetMeshVelocity(ParGridFunction *mv)
+{
+   integrator.SetMeshVelocity(mv);
+}
+
+
 // Set the solution of the previous time step
 // and the timestep size of the current solve.
 void NavStoForm::SetTimeAndSolution(const real_t t,

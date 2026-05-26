@@ -51,13 +51,15 @@ public:
    /// Constructor
    NavStoForm(Array<ParFiniteElementSpace *> &pfes,
               RBVMS::IncNavStoIntegrator &integ)
-      : ParTimeDepBlockNonlinForm(pfes), integrator(integ), hasGrad(false) {};
+      : ParTimeDepBlockNonlinForm(pfes), integrator(integ),
+        hasGrad(false) {};
 
    void SetStrongBC (Array<int> strong_bdr);
    void SetWeakBC   (Array<int> weak_bdr);
    void SetOutflowBC(Array<int> outflow_bdr);
    void SetSuctionBC(Array<int> suction_bdr);
    void SetBlowingBC(Array<int> blowing_bdr);
+   void SetMeshVelocity(ParGridFunction *mv);
 
    /// Set the solution of the previous time step @a x0
    /// and the timestep size @a dt of the current solve.
