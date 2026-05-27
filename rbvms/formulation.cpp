@@ -70,6 +70,11 @@ void NavStoForm::SetMeshVelocity(ParGridFunction *mv)
    integrator.SetMeshVelocity(mv);
 }
 
+void NavStoForm::SetForceVector(Array<int> &d, std::vector<double> &f)
+{
+   bdr_dofs = &d;
+   bdr_force = &f;
+}
 
 // Set the solution of the previous time step
 // and the timestep size of the current solve.
@@ -268,6 +273,12 @@ void NavStoForm::MultBlocked(const BlockVector &bx,
          ys_true.GetBlock(0).GetSubVector(dofs, vrhs);
          bdrForce(b,v) = vrhs.Sum();
       }
+   }
+
+   if (bdr_force)
+   {
+      Vector tmp(bdr_force->data(), bdr_force->size());
+      ys_true.GetBlock(0).GetSubVector(*bdr_dofs, tmp);
    }
 
    // Domain boundary weak Dirichelet BC

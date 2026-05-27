@@ -46,13 +46,14 @@ private:
    /// Conservative boundary forces
    mutable DenseMatrix bdrForce;
    mutable bool hasGrad;
-
+   std::vector<double> *bdr_force;
+   Array<int> *bdr_dofs;
 public:
    /// Constructor
    NavStoForm(Array<ParFiniteElementSpace *> &pfes,
               RBVMS::IncNavStoIntegrator &integ)
       : ParTimeDepBlockNonlinForm(pfes), integrator(integ),
-        hasGrad(false) {};
+        hasGrad(false), bdr_force(nullptr), bdr_dofs(nullptr) {};
 
    void SetStrongBC (Array<int> strong_bdr);
    void SetWeakBC   (Array<int> weak_bdr);
@@ -60,6 +61,7 @@ public:
    void SetSuctionBC(Array<int> suction_bdr);
    void SetBlowingBC(Array<int> blowing_bdr);
    void SetMeshVelocity(ParGridFunction *mv);
+   void SetForceVector(Array<int> &dofs, std::vector<double> &force);
 
    /// Set the solution of the previous time step @a x0
    /// and the timestep size @a dt of the current solve.

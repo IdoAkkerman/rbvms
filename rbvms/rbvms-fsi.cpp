@@ -197,8 +197,8 @@ int main(int argc, char *argv[])
    // 3. Read the mesh from the given mesh file.
    Mesh mesh(mesh_file, 1, 1);
    int dim = mesh.Dimension();
-   int ordering = Ordering::byVDIM;
-   // int ordering =Ordering::byNODES;
+   //int ordering = Ordering::byVDIM;
+   int ordering =Ordering::byNODES;
    mesh.SetCurvature(1, false, -1, ordering);
 
    // Refine mesh
@@ -392,7 +392,11 @@ int main(int argc, char *argv[])
    // Define weak form and evolution
    RBVMS::IncNavStoIntegrator integrator(rho, mu, force, sol, suction, blowing,
                                          &meshMotion.pgf_um);
+
    RBVMS::NavStoForm form(spaces, integrator);
+
+   form.SetForceVector(meshMotion.fsi_dofs, meshMotion.forces);
+
    RBVMS::Evolution evo(form, newton_solver);
    ode_solver->Init(evo);
 
@@ -437,7 +441,7 @@ int main(int argc, char *argv[])
    vdc.SetPrefixPath(vis_dir);
    vdc.RegisterField("u", &x_u);
    vdc.RegisterField("p", &x_p);
-   //vdc.RegisterField("d", &x_d);
+   vdc.RegisterField("d", &meshMotion.pgf_d);
 
    // Get the start vector(s) from file -- or from function
    real_t t;
@@ -585,9 +589,15 @@ int main(int argc, char *argv[])
       t -= dt_used;
 
       // Compute force
-      pgf_force.ComputeBoundaryForce(xp);
-      meshMotion.SetForce(pgf_force);
-
+      //    pgf_force.ComputeBoundaryForce(xp);
+      //    meshMotion.SetForce(pgf_force);
+      for (auto& x :  meshMotion.forces)
+      {
+         // x /= dt_used;
+         //  x *=2.0;
+         //    x *=2.0;
+         x *= 1000.0;
+      }
       // Communicate force
       precice.writeData(meshMotion.meshName,
                         "Force",
