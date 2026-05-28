@@ -173,7 +173,7 @@ void MeshMotion::SetVelocityBCs(Vector &x)
 {
    for (int i = 0; i < fsi_dofs.Size(); i++)
    {
-      x[fsi_dofs[i]] = pgf_um[fsi_dofs[i]];
+      x[fsi_dofs[i]] = -pgf_um[fsi_dofs[i]];
    }
 }
 
