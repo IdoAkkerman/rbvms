@@ -54,8 +54,8 @@ public:
   {
     // Compute total moment M = x^{n} x f^{n+1}
     double moment = 0;
-  //for (unsigned int i = 0; i < forces.size() / 2; ++i)--> CHANGED BY IA 
-  //   moment += vertices[2 * i] * forces[2 * i + 1] - vertices[2 * i + 1] * forces[2 * i];--> CHANGED BY IA 
+    for (unsigned int i = 0; i < forces.size() / 2; ++i)
+      moment += vertices[2 * i] * forces[2 * i + 1] - vertices[2 * i + 1] * forces[2 * i];
 
     // Store rigid body angle at the previous time level theta^{n}
     const double theta_old = theta;
@@ -98,8 +98,8 @@ int main()
   const std::string data_read_name("Force");
 
   // Mesh configuration
-  constexpr int vertical_refinement   = 2;
-  constexpr int horizontal_refinement = 2;
+  constexpr int vertical_refinement   = 3;
+  constexpr int horizontal_refinement = 6;
   // Rotation center is at (0,0)
   constexpr double length = 0.2;
   constexpr double height = 0.02;
@@ -108,31 +108,22 @@ int main()
   constexpr double spring_constant = -25;
 
   // Time, where spring is stiffened
-  constexpr double switch_time       = 0.25; // 1.5; --> CHANGED BY IA
-  constexpr double stiffening_factor = 6;    // 8; --> CHANGED BY IA
-
+  constexpr double switch_time       = 1.5;
+  constexpr double stiffening_factor = 8;
   //*******************************************************************************************//
 
   // Derived quantities
-  constexpr int n_vertical_nodes   = 2;//vertical_refinement * 2 + 1;
-  constexpr int n_horizontal_nodes = 2;//horizontal_refinement * 2 + 1;
-
-    std::cout << n_vertical_nodes << " vert nodes " << std::endl;
-    std::cout << n_horizontal_nodes << "_horizontal nodes " << std::endl;
+  constexpr int n_vertical_nodes   = vertical_refinement * 2 + 1;
+  constexpr int n_horizontal_nodes = horizontal_refinement * 2 + 1;
   // Subtract shared nodes at each rigid body corner
   constexpr int    n_nodes = (n_vertical_nodes + n_horizontal_nodes - 2) * 2;
-  
-      std::cout << n_nodes << " nodes " << std::endl;
-      
   constexpr double mass    = length * height * density;
   // The moment of inertia is computed according to the rigid body configuration:
   // a thin rectangular plate of height h, length l and mass m with axis of rotation
   // at the end of the plate: I = (1/12)*m*(4*l^2+h^2)
   constexpr double inertia_moment = (1. / 12) * mass * (4 * length * length + height * height);
- // constexpr
-   double delta_y        = height / (n_vertical_nodes - 1);
-  //constexpr 
-  double delta_x        = length / (n_horizontal_nodes - 1);
+  constexpr double delta_y        = height / (n_vertical_nodes - 1);
+  constexpr double delta_x        = length / (n_horizontal_nodes - 1);
 
   // Create Participant
   precice::Participant precice(solver_name,
@@ -147,7 +138,7 @@ int main()
   Vector           vertices(dim * n_nodes);
   Vector           displacement(dim * n_nodes);
   std::vector<int> vertex_ids(n_nodes);
-  double           theta_dot = 1.0; // 0.0; --> CHANGED BY IA
+  double           theta_dot = 0.0;
   double           theta     = 0.0;
 
   {
@@ -186,12 +177,6 @@ int main()
       vertices[of + (2 * n_remaining_nodes) + dim * i + 1] = -vertices[of + dim * i + 1]; // fixed y
     }
   }
-
-      for (int i = 0; i < n_nodes; ++i)
-      {
-         std::cout<<vertices[dim * i]<<" "<<vertices[dim * i + 1]<<std::endl;
-      }
-
   // Store the initial configuration
   const Vector initial_vertices = vertices;
 
@@ -245,10 +230,6 @@ int main()
                      0,
                      forces);
 
-    std::cout<<" Forces \n";
-    for (uint i = 0; i < vertex_ids.size(); ++i)
-        std::cout<<vertex_ids[i]<<":"<<forces[2*i]<<" "<<forces[2*i+1]<<std::endl;
-
     const double current_spring = time > switch_time ? spring_constant * stiffening_factor : spring_constant;
     // Solve system
     solver.solve(forces, initial_vertices, vertices, theta, theta_dot, current_spring, dt);
@@ -263,10 +244,6 @@ int main()
                       data_write_name,
                       vertex_ids,
                       displacement);
-
-    std::cout<<" Displacements \n";
-    for (uint i = 0; i < vertex_ids.size(); ++i)
-        std::cout<<vertex_ids[i]<<":"<<displacement[2*i]<<" "<<displacement[2*i+1]<<std::endl;
 
     std::cout << "Rigid body: advancing in time\n";
     precice.advance(dt);
