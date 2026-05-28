@@ -161,6 +161,7 @@ int main(int argc, char *argv[])
    const char *precice_solverName = "Fluid";
    const char *precice_configFile = "../precice-config.xml";
    const char *precice_meshName = "Fluid-Mesh";
+   real_t precice_scale = 1.0;
    bool fsi_strong = true;
 
    args.AddOption(&precice_solverName, "-ps", "--precice-solver",
@@ -169,6 +170,9 @@ int main(int argc, char *argv[])
                   "Precice configuration file");
    args.AddOption(&precice_meshName, "-pm", "--precice-mesh",
                   "Name of the precice mesh");
+   args.AddOption(&precice_scale, "-pfs", "--precice-scale",
+                  "Precice scaling of force ");
+
 
    // Solution input/output params
    bool restart = false;
@@ -596,7 +600,8 @@ int main(int argc, char *argv[])
          // x /= dt_used;
          //  x *=2.0;
          //    x *=2.0;
-         x *= 1000.0;
+         x *= precice_scale;
+         //x /= 4;
       }
       // Communicate force
       precice.writeData(meshMotion.meshName,
