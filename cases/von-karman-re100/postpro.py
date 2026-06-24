@@ -1,7 +1,7 @@
 import numpy
 
 # Read data
-data=numpy.loadtxt('output_000000.dat', usecols=(1,8,9))
+data=numpy.loadtxt('output_000000.dat', usecols=(1,9,10))
 
 # Find zero crossings
 zc = numpy.where(numpy.diff(numpy.sign(data[:,2])))[0]
