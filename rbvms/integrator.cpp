@@ -370,7 +370,7 @@ void IncNavStoIntegrator::AssembleElementVector(
       AddMult_a_VVt(-rho, u, flux);               // Add convection to flux
       AddMult_a_ABt(w, shg_u, flux, elv_u);       // Add flux term to rhs
       f.Add(-rho, dudt);                          // Add Acceleration to force
-      grad_u.AddMult(uc,f);                       // Add mesh motion
+      grad_u.AddMult(um,f);                       // Add mesh motion
       AddMult_a_VWt(-w, sh_u, f, elv_u);          // Add force + acc + mm terms to rhs
 
       // Compute continuity weak residual
