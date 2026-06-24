@@ -127,6 +127,7 @@ if (DEFINED MFEM_DIR)
    add_subdirectory(rbvms)
    add_subdirectory(rbvms-ls)
    add_subdirectory(vvp_NS_mm)
+   add_subdirectory(supg)
 
 #-------------------------------------------------------------------------------
 # If no MFEM_DIR is given --> build a local version here
@@ -157,10 +158,10 @@ else()
    #----------------------------------------------------------------------------
    ExternalProject_Add(hypre
                        PREFIX ${INSTALL_DIR}
-                       CONFIGURE_COMMAND ${CMAKE_COMMAND}
-                                         "${PROJECT_SOURCE_DIR}/hypre/src"
-                                         "-DHYPRE_INSTALL_PREFIX=${INSTALL_DIR}"
-                       SOURCE_DIR ${PROJECT_SOURCE_DIR}/hypre
+                       CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}
+                                  -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+                                  -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
+                       SOURCE_DIR ${PROJECT_SOURCE_DIR}/hypre/src
                        BINARY_DIR ${PROJECT_BINARY_DIR}/hypre)
 
    #----------------------------------------------------------------------------

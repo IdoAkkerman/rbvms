@@ -61,6 +61,8 @@ public:
       GetLibFunction(libName, funNames, required);
    }
 
+   bool Foundfunction(){ return TDFunction;}
+
    /// Evaluate 
    using Coefficient::Eval;
 
@@ -103,6 +105,8 @@ public:
    {
       GetLibFunction(libName, vector<string>({funName}), required);
    }
+
+   bool Foundfunction(){ return TDFunction;}
 
    /** Get a @a funNames C-function from the @a libName library
         - @a libName path+name of the library to use.
