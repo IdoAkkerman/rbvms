@@ -446,6 +446,7 @@ int main(int argc, char *argv[])
    vdc.RegisterField("u", &x_u);
    vdc.RegisterField("p", &x_p);
    vdc.RegisterField("d", &meshMotion.pgf_d);
+   vdc.RegisterField("um", &meshMotion.pgf_um);
 
    // Get the start vector(s) from file -- or from function
    real_t t;
@@ -593,14 +594,14 @@ int main(int argc, char *argv[])
       t -= dt_used;
 
       // Compute force
-      //    pgf_force.ComputeBoundaryForce(xp);
-      //    meshMotion.SetForce(pgf_force);
+      // pgf_force.ComputeBoundaryForce(xp);
+      // meshMotion.SetForce(pgf_force);
       for (auto& x :  meshMotion.forces)
       {
          // x /= dt_used;
          //  x *=2.0;
          //    x *=2.0;
-         x *= precice_scale;
+         x *= -precice_scale;
          //x /= 4;
       }
       // Communicate force

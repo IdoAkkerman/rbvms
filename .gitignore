@@ -13,12 +13,19 @@ bin/*
 
 # Run directories
 cases/*/log*
+cases/*/*/log*
 cases/*/output_*.dat
+cases/*/*/output_*.dat
 cases/*/restart
+cases/*/*/restart
 cases/*/solution
+cases/*/*/solution
 cases/*/gprof*
+cases/*/*/gprof*
 cases/*/*.msh
+cases/*/*/*.msh
 cases/*/*.bak
+cases/*/*/precice-*
 
 # Prerequisites
 *.d
@@ -58,3 +65,12 @@ cases/*/*.bak
 *.sif/
 *.img
 *.img/
+
+*.vtu
+*.pvd
+
+*log0
+*.log
+
+*.png
+
