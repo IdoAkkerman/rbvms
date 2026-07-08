@@ -143,6 +143,7 @@ int main(int argc, char *argv[])
 
    // Refine mesh
    {
+      //      mesh.DegreeElevate(1);
       if (mesh.NURBSext && (strlen(ref_file) != 0))
       {
          mesh.RefineNURBSFromFile(ref_file);
@@ -223,103 +224,196 @@ int main(int argc, char *argv[])
          }
       }
    }
+   /*
 
-   // Define the gridfunction and solution vector
-   ParGridFunction phi_gf(space);
-   LibCoefficient sol_phi(lib_file, "sol_phi");
-   phi_gf.ProjectCoefficient(sol_phi);
-   Vector xp;
-   phi_gf.GetTrueDofs(xp);
 
-   // Define the visualisation output
-   VisItDataCollection vdc("step", &pmesh);
-   vdc.SetPrefixPath(vis_dir);
-   vdc.RegisterField("phi", &phi_gf);
-   vdc.SetCycle(0);
-   vdc.Save();
+        TAU PART
 
-   // Define the physical parameters
-   LibVectorCoefficient adv(dim, lib_file, "advection");
-   LibCoefficient mu(lib_file, "mu", false, mu_param);
-   LibCoefficient force(lib_file, "force");
+   */
 
-   // Define weak form and evolution
-   StabConvDifIntegrator integrator(adv, mu, force);
-   ParNonlinearForm form(space);
-   form.AddDomainIntegrator(&integrator);
-   form.UseExternalIntegrators();
-
-   Array<int> ess_bdr(space->GetMesh()->bdr_attributes.Max());
-   ess_bdr = 0;
-   for (int b = 0; b < strong_bdr.Size(); ++b)
    {
-      ess_bdr[strong_bdr[b]-1] = 1;
-   }
-   ess_bdr.Print();
-   form.SetEssentialBC(ess_bdr);
-   //form.SetWeakBC   (weak_bdr);
+      std::cout<<"Solve tau problem\n";
+      // Define the gridfunction and solution vector
+      ParGridFunction phi_gf(space);
+      LibCoefficient sol_phi(lib_file, "sol_phi");
+      phi_gf.ProjectCoefficient(sol_phi);
+      Vector xp;
+      phi_gf.GetTrueDofs(xp);
 
-   Solver* pc_mom  = nullptr;
-   HypreILU* ilu_mom = new HypreILU();
-   pc_mom  = ilu_mom;
+      // Define the visualisation output
+      VisItDataCollection vdc("tau", &pmesh);
+      vdc.SetPrefixPath(vis_dir);
+      vdc.RegisterField("phi", &phi_gf);
+      vdc.SetCycle(0);
+      vdc.Save();
 
-   // Set up the Jacobian solver
-   FGMRESSolver gmres(MPI_COMM_WORLD);
-   gmres.iterative_mode = false;
-   gmres.SetRelTol(GMRES_RelTol);
-   gmres.SetMaxIter(GMRES_MaxIter);
-   gmres.SetKDim(GMRES_MaxIter+1);
-   gmres.SetPrintLevel(3);
-   gmres.SetPreconditioner(*pc_mom);
+      // Define the physical parameters
+      LibVectorCoefficient adv(dim, lib_file, "advection");
+      LibCoefficient mu(lib_file, "mu", false, mu_param);
+      LibCoefficient force(lib_file, "force");
 
-   // Set up the Newton solver
-   NewtonSolver newton_solver(MPI_COMM_WORLD);
-   newton_solver.SetOperator(form);
-   newton_solver.iterative_mode = true;
-   newton_solver.SetPrintLevel(1);
-   newton_solver.SetRelTol(Newton_RelTol);
-   newton_solver.SetMaxIter(Newton_MaxIter);
-   newton_solver.SetSolver(gmres);
+      // Define the inverse estimate
+      InverseEstimateCoefficient inv_est(space);
 
-   // Solver nonlinear system
-   Vector zero(space->TrueVSize());
-   zero = 0.0;
-   newton_solver.Mult(zero, xp);
-   phi_gf.Distribute(xp);
+      // Define weak form and evolution
+      StabTauIntegrator integrator(adv, mu, inv_est);
+      ParNonlinearForm form(space);
+      form.AddDomainIntegrator(&integrator);
+      form.UseExternalIntegrators();
 
-   // Compute errors
-   LibVectorCoefficient sol_grad(dim, lib_file, "grad_phi", false);
-   if (sol_grad.Foundfunction())
-   {
-      int order_quad = max(2, 2*order+1);
-      const IntegrationRule *irs[Geometry::NumGeom];
-      for (int i=0; i < Geometry::NumGeom; ++i)
+      Array<int> ess_bdr(space->GetMesh()->bdr_attributes.Max());
+      ess_bdr = 0;
+      for (int b = 0; b < strong_bdr.Size(); ++b)
       {
-         irs[i] = &(IntRules.Get(i, order_quad));
+         ess_bdr[strong_bdr[b]-1] = 1;
+      }
+      ess_bdr.Print();
+      form.SetEssentialBC(ess_bdr);
+      //form.SetWeakBC   (weak_bdr);
+
+      Solver* pc_mom  = nullptr;
+      HypreILU* ilu_mom = new HypreILU();
+      pc_mom  = ilu_mom;
+
+      // Set up the Jacobian solver
+      FGMRESSolver gmres(MPI_COMM_WORLD);
+      gmres.iterative_mode = false;
+      gmres.SetRelTol(GMRES_RelTol);
+      gmres.SetMaxIter(GMRES_MaxIter);
+      gmres.SetKDim(GMRES_MaxIter+1);
+      gmres.SetPrintLevel(3);
+      gmres.SetPreconditioner(*pc_mom);
+
+      // Set up the Newton solver
+      NewtonSolver newton_solver(MPI_COMM_WORLD);
+      newton_solver.SetOperator(form);
+      newton_solver.iterative_mode = true;
+      newton_solver.SetPrintLevel(1);
+      newton_solver.SetRelTol(Newton_RelTol);
+      newton_solver.SetMaxIter(Newton_MaxIter);
+      newton_solver.SetSolver(gmres);
+
+      // Solver nonlinear system
+      Vector zero(space->TrueVSize());
+      zero = 0.0;
+      newton_solver.Mult(zero, xp);
+      phi_gf.Distribute(xp);
+
+      // Write solution
+      vdc.SetCycle(1);
+      vdc.Save();
+   }
+
+   /*
+
+
+        CONDIF PART
+
+   */
+
+   {
+      std::cout<<"Solve convection-diffusion problem\n";
+      // Define the gridfunction and solution vector
+      ParGridFunction phi_gf(space);
+      LibCoefficient sol_phi(lib_file, "sol_phi");
+      phi_gf.ProjectCoefficient(sol_phi);
+      Vector xp;
+      phi_gf.GetTrueDofs(xp);
+
+      // Define the visualisation output
+      VisItDataCollection vdc("phi", &pmesh);
+      vdc.SetPrefixPath(vis_dir);
+      vdc.RegisterField("phi", &phi_gf);
+      vdc.SetCycle(0);
+      vdc.Save();
+
+      // Define the physical parameters
+      LibVectorCoefficient adv(dim, lib_file, "advection");
+      LibCoefficient mu(lib_file, "mu", false, mu_param);
+      LibCoefficient force(lib_file, "force");
+
+      // Define the inverse estimate
+      InverseEstimateCoefficient inv_est(space);
+
+      // Define weak form and evolution
+      StabConvDifIntegrator integrator(adv, mu, force, inv_est);
+      ParNonlinearForm form(space);
+      form.AddDomainIntegrator(&integrator);
+      form.UseExternalIntegrators();
+
+      Array<int> ess_bdr(space->GetMesh()->bdr_attributes.Max());
+      ess_bdr = 0;
+      for (int b = 0; b < strong_bdr.Size(); ++b)
+      {
+         ess_bdr[strong_bdr[b]-1] = 1;
+      }
+      ess_bdr.Print();
+      form.SetEssentialBC(ess_bdr);
+      //form.SetWeakBC   (weak_bdr);
+
+      Solver* pc_mom  = nullptr;
+      HypreILU* ilu_mom = new HypreILU();
+      pc_mom  = ilu_mom;
+
+      // Set up the Jacobian solver
+      FGMRESSolver gmres(MPI_COMM_WORLD);
+      gmres.iterative_mode = false;
+      gmres.SetRelTol(GMRES_RelTol);
+      gmres.SetMaxIter(GMRES_MaxIter);
+      gmres.SetKDim(GMRES_MaxIter+1);
+      gmres.SetPrintLevel(3);
+      gmres.SetPreconditioner(*pc_mom);
+
+      // Set up the Newton solver
+      NewtonSolver newton_solver(MPI_COMM_WORLD);
+      newton_solver.SetOperator(form);
+      newton_solver.iterative_mode = true;
+      newton_solver.SetPrintLevel(1);
+      newton_solver.SetRelTol(Newton_RelTol);
+      newton_solver.SetMaxIter(Newton_MaxIter);
+      newton_solver.SetSolver(gmres);
+
+      // Solver nonlinear system
+      Vector zero(space->TrueVSize());
+      zero = 0.0;
+      newton_solver.Mult(zero, xp);
+      phi_gf.Distribute(xp);
+
+      // Compute errors
+      LibVectorCoefficient sol_grad(dim, lib_file, "grad_phi", false);
+      if (sol_grad.Foundfunction())
+      {
+         int order_quad = max(2, 2*order+1);
+         const IntegrationRule *irs[Geometry::NumGeom];
+         for (int i=0; i < Geometry::NumGeom; ++i)
+         {
+            irs[i] = &(IntRules.Get(i, order_quad));
+         }
+
+         double err_phi  = phi_gf.ComputeL2Error(sol_phi, irs);
+         double norm_phi = ComputeGlobalLpNorm(2., sol_phi, pmesh, irs);
+         std::cout << "|| phi_h - phi_ex || / || phi_ex || = " << err_phi / norm_phi <<
+                   "\n";
+
+         err_phi  = phi_gf.ComputeGradError(&sol_grad, irs);
+         norm_phi =  ComputeGlobalLpNorm(2., sol_grad, pmesh, irs);
+         std::cout << "||grad phi_h - grad phi_ex || / || grad phi_ex || = " << err_phi /
+                   norm_phi << "\n";
       }
 
-      double err_phi  = phi_gf.ComputeL2Error(sol_phi, irs);
-      double norm_phi = ComputeGlobalLpNorm(2., sol_phi, pmesh, irs);
-      std::cout << "|| phi_h - phi_ex || / || phi_ex || = " << err_phi / norm_phi << "\n";
+      // Write solution
+      vdc.SetCycle(1);
+      vdc.Save();
 
-      err_phi  = phi_gf.ComputeGradError(&sol_grad, irs);
-      norm_phi =  ComputeGlobalLpNorm(2., sol_grad, pmesh, irs);
-      std::cout << "||grad phi_h - grad phi_ex || / || grad phi_ex || = " << err_phi / norm_phi << "\n";
+      {
+         char vishost[] = "localhost";
+         int visport = 19916;
+         socketstream sol_sock(vishost, visport);
+         sol_sock << "parallel " << num_procs << " " << myid << "\n";
+         sol_sock.precision(8);
+         sol_sock << "solution\n" << pmesh << phi_gf << flush;
+      }
    }
-
-   // Write solution
-   vdc.SetCycle(1);
-   vdc.Save();
-
-   {
-      char vishost[] = "localhost";
-      int visport = 19916;
-      socketstream sol_sock(vishost, visport);
-      sol_sock << "parallel " << num_procs << " " << myid << "\n";
-      sol_sock.precision(8);
-      sol_sock << "solution\n" << pmesh << phi_gf << flush;
-   }
-
    // Free the used memory.
    delete fec;
    delete space;
