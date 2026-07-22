@@ -63,6 +63,7 @@ u_np1 = Function(V)
 u_n = Function(V)
 v_n = Function(V)
 a_n = Function(V)
+RHS = Function(V)
 
 
 f_N_function = interpolate(Expression(("1", "0"), degree=1), V)
@@ -86,10 +87,10 @@ dt = Constant(np.min([precice_dt, fenics_dt]))
 bc = DirichletBC(V, Constant((0, 0)), fixed_boundary)
 
 # alpha method parameters
-alpha_m = Constant(0.2)
-alpha_f = Constant(0.4)
-# alpha_m = Constant(0)
-# alpha_f = Constant(0)
+# alpha_m = Constant(0.2)
+# alpha_f = Constant(0.4)
+alpha_m = Constant(0)
+alpha_f = Constant(0)
 
 """
 Check requirements for alpha_m and alpha_f from
@@ -189,9 +190,11 @@ n = 0
 E_ext = 0
 
 displacement_out = File("output/u_fsi.pvd")
+rhs_out = File("output/rhs_fsi.pvd")
 
 u_n.rename("Displacement", "")
 u_np1.rename("Displacement", "")
+RHS.rename("Forces", "")
 displacement_out << (u_n, t)
 
 while precice.is_coupling_ongoing():
@@ -212,11 +215,16 @@ while precice.is_coupling_ongoing():
     A, b = assemble_system(a_form, L_form, bc)
 
     b_forces = b.copy()  # b is the same for every iteration, only forces change
+    RHS.vector().zero()
 
     for ps in Forces_x:
         ps.apply(b_forces)
+        ps.apply(RHS.vector())
     for ps in Forces_y:
         ps.apply(b_forces)
+        ps.apply(RHS.vector())
+
+    rhs_out << (RHS, t)
 
     assert (b is not b_forces)
     solve(A, u_np1.vector(), b_forces)

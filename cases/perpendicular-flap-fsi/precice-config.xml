@@ -42,7 +42,14 @@
 
   <m2n:sockets acceptor="Fluid" connector="Solid" exchange-directory=".." />
 
-  <coupling-scheme:parallel-implicit>
+  <coupling-scheme:serial-explicit>
+    <time-window-size value="0.01" />
+    <max-time value="5" />
+    <participants first="Solid" second="Fluid" />
+    <exchange data="Force" mesh="Solid-Mesh" from="Fluid" to="Solid" />
+    <exchange data="Displacement" mesh="Solid-Mesh" from="Solid" to="Fluid" />
+  </coupling-scheme:serial-explicit>
+  <!-- <coupling-scheme:parallel-implicit>
     <time-window-size value="0.01" />
     <max-time value="5" />
     <participants first="Fluid" second="Solid" />
@@ -60,5 +67,5 @@
       <max-used-iterations value="100" />
       <time-windows-reused value="15" />
     </acceleration:IQN-ILS>
-  </coupling-scheme:parallel-implicit>
+  </coupling-scheme:parallel-implicit> -->
 </precice-configuration>
