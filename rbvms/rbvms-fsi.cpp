@@ -202,8 +202,28 @@ int main(int argc, char *argv[])
    Mesh mesh(mesh_file, 1, 1);
    int dim = mesh.Dimension();
    //int ordering = Ordering::byVDIM;
-   int ordering =Ordering::byNODES;
-   mesh.SetCurvature(1, false, -1, ordering);
+   int ordering = Ordering::byNODES;
+   if ((mesh.NURBSext) && (ordering == Ordering::byNODES))
+   {
+      ordering = Ordering::byVDIM;
+      MFEM_WARNING("NURBS mesh requires ordering by VDIM");
+   }
+
+   // NURBS meshes already carry their own (NURBS-based) Nodes. Calling
+   // SetCurvature() on them replaces Nodes with a plain H1 grid function
+   // and, as a side effect, nulls out the mesh's NURBSext -- silently
+   // turning every NURBS run into a straight-sided FEM run regardless of
+   // -o. Only regular (non-NURBS) meshes need SetCurvature() here, to gain
+   // a nodal grid function for ALE mesh motion.
+   if (mesh.NURBSext)
+   {
+      mesh.DegreeElevate(order - 1); // Assumption that mesh has order 1!!
+   }
+   else
+   {
+      mesh.SetCurvature(1, false, -1, ordering);
+   }
+   
 
    // Refine mesh
    {
@@ -219,9 +239,24 @@ int main(int argc, char *argv[])
       if (Mpi::Root()) { mesh.PrintInfo(); }
    }
 
+   // ## LOR 
+   // ===========================
+   // Array<Vector *> points;
+   // NURBSPointSet points_lor = NURBSPointSet::DEMKO;
+   // mesh.NURBSext->GetPointsCompr(points, points_lor);
+   // Mesh mesh_lor = mesh.GetLinearNURBSMesh(points);
+   //## ==========================
+   
+
    // Partition mesh
    ParMesh pmesh(MPI_COMM_WORLD, mesh);
    mesh.Clear();
+
+   // ## LOR 
+   // ===========================
+   // ParMesh pmesh_lor(MPI_COMM_WORLD, mesh_lor);
+   // mesh_lor.Clear();
+   // ===========================
 
    // Boundary conditions
    if (Mpi::Root())
@@ -273,22 +308,77 @@ int main(int argc, char *argv[])
 
    // 4. Define a finite element space on the mesh.
    Array<FiniteElementCollection *> fecs(2);
+   Array<ParFiniteElementSpace *> spaces(2);
+   // ## Projection for visualisation
+   // ===========================
+   // Array<FiniteElementCollection *> fecs2(2);
+   // Array<ParFiniteElementSpace *> spaces2(2);
+   // ===========================
+
+   // ## LOR
+   // ===========================
+   // FiniteElementCollection * fec_lor;
+   // ParFiniteElementSpace * space_lor;
+   // GridTransfer *gt = NULL;
+   // ===========================
+
    if (pmesh.NURBSext)
    {
       fecs[0] = new NURBSFECollection(order);
       fecs[1] = new NURBSFECollection(order);
+      // ## LOR
+      // ===========================
+      // fec_lor = new NURBSFECollection(1);
+      // ===========================
+      cout << "Using NURBS FEs: " << fecs[0]->Name() << endl;
+
+      // Degree-elevate independent copies of the mesh's NURBSExtension to
+      // the requested solution order. Passing these explicitly is required:
+      // without it, ParFiniteElementSpace just reuses pmesh.NURBSext as-is,
+      // silently keeping the mesh file's inherent (usually order-1) degree
+      // regardless of -o. Each ParFiniteElementSpace takes ownership of the
+      // NURBSExtension it is given, so a separate copy is needed per space.
+      NURBSExtension *NURBSext0 = new NURBSExtension(pmesh.NURBSext, order);
+      NURBSExtension *NURBSext1 = new NURBSExtension(pmesh.NURBSext, order);
+
+      // ## LOR
+      // ===========================
+      // NURBSExtension *NURBSext_lor = new NURBSExtension(pmesh_lor.NURBSext, 1);
+      // ===========================
+
+      spaces[0] = new ParFiniteElementSpace(&pmesh, NURBSext0, fecs[0], dim,
+                                            ordering);
+      // ,master_bdr, slave_bdr);
+      spaces[1] = new ParFiniteElementSpace(&pmesh, NURBSext1, fecs[1], 1,
+                                            ordering);
+      // ## LOR
+      // ===========================
+      // space_lor = new ParFiniteElementSpace(&pmesh_lor, NURBSext_lor, fec_lor, dim,
+      //                                       ordering);
+      
+      // gt = new InterpolationGridTransfer(*spaces[0], *space_lor);
+
+      // const Operator &P = gt->ForwardOperator();
+      // ===========================
    }
    else
    {
       fecs[0] = new H1_FECollection(order, dim);
       fecs[1] = new H1_FECollection(order, dim);
-   }
+      cout << "Using FEM FEs: " << fecs[0]->Name() << endl;
 
-   Array<ParFiniteElementSpace *> spaces(2);
-   spaces[0] = new ParFiniteElementSpace(&pmesh, fecs[0], dim, ordering);
-   // ,master_bdr, slave_bdr);
-   spaces[1] = new ParFiniteElementSpace(&pmesh, fecs[1], 1, ordering);
-   //  ,master_bdr, slave_bdr);
+      spaces[0] = new ParFiniteElementSpace(&pmesh, fecs[0], dim, ordering);
+      // ,master_bdr, slave_bdr);
+      spaces[1] = new ParFiniteElementSpace(&pmesh, fecs[1], 1, ordering);
+      //  ,master_bdr, slave_bdr);
+   }
+   // ## Projection for visualisation
+   // ===========================
+   // fecs2[0] = new H1_FECollection(order, dim);
+   // fecs2[1] = new H1_FECollection(order, dim);
+   // spaces2[0] = new ParFiniteElementSpace(&pmesh, fecs2[0], dim, ordering);
+   // spaces2[1] = new ParFiniteElementSpace(&pmesh, fecs2[1], 1, ordering);
+   // ===========================
 
    // Report the degree of freedoms used
    {
@@ -430,6 +520,25 @@ int main(int argc, char *argv[])
    // Define the gridfunctions
    ParGridFunction x_u(spaces[0]);
    ParGridFunction x_p(spaces[1]);
+   VectorGridFunctionCoefficient x_u_coeff(&x_u);
+   GridFunctionCoefficient x_p_coeff(&x_p);
+   // ## Projection for visualisation
+   // ===========================
+   // ParGridFunction x_u2(spaces2[0]);
+   // ParGridFunction x_p2(spaces2[1]);
+   // ===========================
+
+   // ## LOR
+   // ===========================
+   // ParGridFunction forces_lor(space_lor);
+   // forces_lor = 0.0;
+
+   // ParGridFunction forces_ho(spaces[0]);
+   // forces_ho = 0.0;
+
+   // ParGridFunction disp_lor(space_lor);
+   // disp_lor = 0.0;
+   // ===========================
 
    Array<ParGridFunction*> dx_u(nstate);
    Array<ParGridFunction*> dx_p(nstate);
@@ -447,6 +556,12 @@ int main(int argc, char *argv[])
    vdc.RegisterField("p", &x_p);
    vdc.RegisterField("d", &meshMotion.pgf_d);
    vdc.RegisterField("um", &meshMotion.pgf_um);
+   // ## LOR
+   // ===========================
+   // vdc.RegisterField("forces_ho", &forces_ho);
+   // vdc.RegisterField("forces_lor", &forces_lor);
+   // ===========================
+   
 
    // Get the start vector(s) from file -- or from function
    real_t t;
@@ -501,11 +616,16 @@ int main(int argc, char *argv[])
       t = 0.0; si = 0; ri = 1; vi = 1;
       //LibVectorCoefficient sol(dim, lib_file, "sol_u");
       sol.SetTime(-1.0);
-      x_u.ProjectCoefficient(sol);
+      x_u.ProjectCoefficient(sol, ProjectType::ELEMENT);
       x_p = 0.0;
 
       x_u.GetTrueDofs(xp.GetBlock(0));
       x_p.GetTrueDofs(xp.GetBlock(1));
+      // ## Projection for visualisation
+      // ===========================
+      // x_u2.ProjectCoefficient(x_u_coeff);
+      // x_p2.ProjectCoefficient(x_p_coeff);
+      // ===========================
 
       // Visualize initial condition
       vdc.SetCycle(0);
@@ -584,6 +704,15 @@ int main(int argc, char *argv[])
          line(80);
       }
       meshMotion.Solve(dt_used);
+      // ## LOR
+      // ===========================
+      // if (pmesh.NURBSext)
+      // {
+      //    // meshMotion.pgf_d/pgf_um ==> disp_ho/um_ho, then move the HO mesh
+      //    gt->BackwardOperator().MultTranspose(meshMotion.pgf_d, disp_lor);
+      //    *pmesh_lor.GetNodes() += disp_lor;
+      // }
+      // ===========================
       if (fsi_strong)
       {
          meshMotion.SetVelocityBCs(xp.GetBlock(0));
@@ -604,6 +733,32 @@ int main(int argc, char *argv[])
          x *= -precice_scale;
          //x /= 4;
       }
+      // ## LOR
+      // ===========================
+      // if (pmesh.NURBSext)
+      // {
+      //    // meshMotion.forces == > forces_ho
+      //    for (auto& x :  meshMotion.forces)
+      //    {
+      //       cout << x << " ";
+      //    }
+      //    cout << endl;
+         // meshMotion.TransferForcesToHO(forces_ho);
+
+         // const Operator &P = gt->BackwardOperator();
+         // P.MultTranspose(forces_ho, forces_lor);
+
+         // //forces_lor ===>  meshMotion.forces
+         // meshMotion.TransferForcesFromLOR(forces_lor);
+         // // meshMotion.TransferForcesFromLOR(forces_ho);
+
+      //    for (auto& x :  meshMotion.forces)
+      //    {
+      //       cout << x << " ";
+      //    }
+      //    cout << endl;
+      // }
+      // ===========================
       // Communicate force
       precice.writeData(meshMotion.meshName,
                         "Force",
@@ -699,6 +854,12 @@ int main(int argc, char *argv[])
 
          add (-1.0/dt, xp0.GetBlock(1), 1.0/dt, xp.GetBlock(1), xpi.GetBlock(1));
          x_p.Distribute(xpi.GetBlock(1));
+
+         // ## Projection for visualisation
+         // ===========================
+         // x_u2.ProjectCoefficient(x_u_coeff);
+         // x_p2.ProjectCoefficient(x_p_coeff);
+         // ===========================
 
          // Actually write to file
          vdc.SetCycle(vi);

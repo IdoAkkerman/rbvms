@@ -21,15 +21,17 @@ MeshMotion::MeshMotion(precice::Participant &part,
                "MFEM and Precice dimension don't match!");
 
    // Get nodes gridfunction
-   pmesh.EnsureNodes();
+   // pmesh.EnsureNodes();
    nodes = pmesh.GetNodes();
 
    // Get associated parallel fespace
    pfes = dynamic_cast<ParFiniteElementSpace *>(nodes->FESpace());
+   cout << "Mesh motion ordering" << pfes->GetOrdering() << endl;
    MFEM_VERIFY(pfes, "FESpace should be a parallel");
 
    // Get boundary dofs
    pfes->GetEssentialTrueDofs(bdr_is_fsi,fsi_dofs);
+   // pfes->GetEssentialTrueDofs(bdr_is_fsi,fsi_dofs1);
    vertexSize = fsi_dofs.Size()/dim;
 
    // Get boundary coordinates
@@ -163,6 +165,64 @@ void MeshMotion::Solve(real_t dt)
    // Remember the boundary displacement for incremental solves
    disp0 = disp;
 }
+
+// ## LOR
+// =============================================================
+// void MeshMotion::TransferForcesToHO(ParGridFunction &forces_ho)
+// {
+   
+//    if (pfes->GetOrdering() == Ordering::byVDIM)
+//    {
+//       cout << "Transfering forces to forces_ho byVDIM" << endl;
+//       for (int j = 0; j < dim; j++)
+//       {
+//          for (int i = 0; i < vertexSize; i++)
+//          {
+//             forces_ho[fsi_dofs[i + j*vertexSize]] = forces[j + i*dim];
+
+//          }
+//       }
+//    }
+//    else if (pfes->GetOrdering() == Ordering::byNODES)
+//    {
+//       cout << "Transfering forces to forces_ho byNODES" << endl;
+//       for (int i = 0; i < vertexSize; i++)
+//       {
+//          for (int j = 0; j < dim; j++)
+//          {
+//             forces_ho[fsi_dofs[i*dim + j]] = forces[j + i*dim];
+//          }
+//       }
+//    }
+// }
+
+// void MeshMotion::TransferForcesFromLOR(ParGridFunction &forces_lor)
+// {
+//    if (pfes->GetOrdering() == Ordering::byVDIM)
+//    {
+//       cout << "Transfering forces from LOR byVDIM" << endl;
+//       for (int j = 0; j < dim; j++)
+//       {
+//          for (int i = 0; i < vertexSize; i++)
+//          {
+//             forces[j + i*dim] = forces_lor[fsi_dofs[i + j*vertexSize]];
+
+//          }
+//       }
+//    }
+//    else if (pfes->GetOrdering() == Ordering::byNODES)
+//    {
+//       cout << "Transfering forces from LOR byNODES" << endl;
+//       for (int i = 0; i < vertexSize; i++)
+//       {
+//          for (int j = 0; j < dim; j++)
+//          {
+//             forces[j + i*dim] = forces_lor[fsi_dofs[i*dim + j]];
+//          }
+//       }
+//    }
+// }
+// =============================================================
 
 void MeshMotion::SetTimeLevel(double alpha)
 {

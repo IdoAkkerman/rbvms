@@ -277,18 +277,26 @@ void NavStoForm::MultBlocked(const BlockVector &bx,
 
    if (bdr_force)
    {
-      // bdr_dofs is ordered component-blocked ([x0..xV-1, y0..yV-1, ...]),
-      // but preCICE expects vertex-interleaved data ([x0,y0,x1,y1,...]),
-      // matching the vertex layout set up in MeshMotion. Convert here.
-      int vdim = fes[0]->GetVDim();
-      int vsize = bdr_dofs->Size()/vdim;
-      Vector tmp(bdr_dofs->Size());
-      ys_true.GetBlock(0).GetSubVector(*bdr_dofs, tmp);
-      for (int j = 0; j < vdim; j++)
+      if (mesh->NURBSext)
       {
-         for (int i = 0; i < vsize; i++)
+         Vector tmp(bdr_force->data(), bdr_force->size());
+         ys_true.GetBlock(0).GetSubVector(*bdr_dofs, tmp);
+      }
+      else
+      {
+         // bdr_dofs is ordered component-blocked ([x0..xV-1, y0..yV-1, ...]),
+         // but preCICE expects vertex-interleaved data ([x0,y0,x1,y1,...]),
+         // matching the vertex layout set up in MeshMotion. Convert here.
+         int vdim = fes[0]->GetVDim();
+         int vsize = bdr_dofs->Size()/vdim;
+         Vector tmp(bdr_dofs->Size());
+         ys_true.GetBlock(0).GetSubVector(*bdr_dofs, tmp);
+         for (int j = 0; j < vdim; j++)
          {
-            (*bdr_force)[j + i*vdim] = tmp[i + j*vsize];
+            for (int i = 0; i < vsize; i++)
+            {
+               (*bdr_force)[j + i*vdim] = tmp[i + j*vsize];
+            }
          }
       }
    }

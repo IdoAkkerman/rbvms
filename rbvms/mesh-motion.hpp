@@ -49,6 +49,7 @@ public:
    std::vector<int>     vertexIDs;
    int vertexSize;
    Array<int> fsi_dofs;
+   Array<int> fsi_dofs1;
    std::string meshName;
 
    GridFunction *nodes;
@@ -86,8 +87,12 @@ public:
    void SetVelocityBCs(Vector &x);
 
    void SetForce(Vector &x);
-
-
+   
+   // ## LOR
+   // =============================================================
+   // void TransferForcesToHO(ParGridFunction &forces_ho);
+   // void TransferForcesFromLOR(ParGridFunction &forces_lor);
+   // =============================================================
 
 };
 

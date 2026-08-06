@@ -19,7 +19,7 @@ cases/*/*/output_*.dat
 cases/*/restart
 cases/*/*/restart
 cases/*/solution
-cases/*/*/solution
+cases/*/*/sol*
 cases/*/gprof*
 cases/*/*/gprof*
 cases/*/*.msh
