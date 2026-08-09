@@ -677,16 +677,32 @@ int main(int argc, char *argv[])
       os<<endl;
    }
 
+   // ## Claude code: state storage used to checkpoint/restore the solver
+   // ## Claude code: when preCICE runs implicit (sub-iterated) coupling
+   BlockVector xp_cp(bOffsets);
+   Vector nodes_cp;
+   std::vector<double> disp0_cp;
+   std::vector<Vector> ode_state_cp(nstate);
+   int ode_state_size_cp = 0;
+
    precice.initialize();
    while (precice.isCouplingOngoing())
    {
 
+      // ## Claude code: preCICE asks for a checkpoint once at the start of
+      // ## Claude code: every time window, before any coupling iterations
       if (precice.requiresWritingCheckpoint())
       {
-         // IA TBD      data_container.save_old_state(vertices, theta, theta_dot, time);
-         xp0 = xp; // Correct???
+         xp0 = xp;
+         xp_cp = xp;
+         nodes_cp = *meshMotion.nodes;
+         disp0_cp = meshMotion.disp0;
+         ode_state_size_cp = (nstate > 0) ? ode_solver_ws->GetState().Size() : 0;
+         for (int i = 0; i < ode_state_size_cp; i++)
+         {
+            ode_solver_ws->GetState().Get(i, ode_state_cp[i]);
+         }
       }
-      xp0 = xp;//
       double precice_dt = precice.getMaxTimeStepSize();
       double dt_used = std::min(dt, precice_dt);
       // Print header
@@ -766,168 +782,171 @@ int main(int argc, char *argv[])
                         meshMotion.forces);
       precice.advance(dt_used);
 
-      // Reload time dependent values
+      // ## Claude code: this coupling iteration did not converge -- restore
+      // ## Claude code: the checkpointed state and retry the time window
       if (precice.requiresReadingCheckpoint())
       {
-         //   data_container.reload_old_state(vertices, theta, theta_dot, time);
-      }
-
-      // Increment time in case the time window has been completed
-
-      si++;
-      t += dt_used;
-
-      // Postprocess solution
-      real_t cfl = form.GetCFL();
-      real_t outflow = form.GetOutflow();
-      DenseMatrix bdrForce = form.GetForce();
-      if (Mpi::Root())
-      {
-         // Print to file
-         int nbdr = pmesh.bdr_attributes.Size();
-         os << std::setw(10);
-         os << si<<"\t"<<t<<"\t"<<dt<<"\t"<<cfl<<"\t"<<outflow<<"\t";
-         for (int b=0; b<nbdr; ++b)
+         xp = xp_cp;
+         *meshMotion.nodes = nodes_cp;
+         meshMotion.disp0 = disp0_cp;
+         for (int i = 0; i < ode_state_size_cp; i++)
          {
-            int bnd = pmesh.bdr_attributes[b];
-            for (int v=0; v<dim; ++v)
-            {
-               os<<bdrForce(bnd-1,v)<<"\t";
-            }
-         }
-         os<<"\n"<< std::flush;
-
-         // Print line lambda function
-         auto pline = [](int len)
-         {
-            cout<<" +";
-            for (int b=0; b<len; ++b) { cout<<"-"; }
-            cout<<"+\n";
-         };
-
-         // Print boundary header
-         cout<<"\n";
-         pline(10+13*nbdr);
-         cout<<" | Boundary | ";
-         for (int b=0; b<nbdr; ++b)
-         {
-            cout<<std::setw(10)<<pmesh.bdr_attributes[b]<<" | ";
-         }
-         cout<<"\n";
-         pline(10+13*nbdr);
-
-         // Print actual forces
-         char dimName[] = "xyz";
-         for (int v=0; v<dim; ++v)
-         {
-            cout<<" | Force "<<dimName[v]<<"  | ";
-            for (int b=0; b<nbdr; ++b)
-            {
-               int bnd = pmesh.bdr_attributes[b];
-               cout<<std::defaultfloat<<std::setprecision(4)<<std::setw(10);
-               cout<<bdrForce(bnd-1,v)<<" | ";
-            }
-            cout<<"\n";
-         }
-         pline(10+13*nbdr);
-         cout<<"\n"<<std::flush;
-      }
-
-      // Write visualization files
-      while (t >= dt_vis*vi)
-      {
-         // Interpolate solution
-         real_t fac = (t-dt_vis*vi)/dt;
-
-         // Report to screen
-         if (Mpi::Root())
-         {
-            line(80);
-            cout << "Visit output: " <<vi << endl;
-            cout << "        Time: " <<t-dt<<" "<<t-fac*dt<<" "<<t<<endl;
-            line(80);
-         }
-
-         // Copy solution in grid functions
-         add (fac, xp0.GetBlock(0),(1.0-fac), xp.GetBlock(0), xpi.GetBlock(0));
-         x_u.Distribute(xpi.GetBlock(0));
-
-         add (-1.0/dt, xp0.GetBlock(1), 1.0/dt, xp.GetBlock(1), xpi.GetBlock(1));
-         x_p.Distribute(xpi.GetBlock(1));
-
-         // ## Projection for visualisation
-         // ===========================
-         // x_u2.ProjectCoefficient(x_u_coeff);
-         // x_p2.ProjectCoefficient(x_p_coeff);
-         // ===========================
-
-         // Actually write to file
-         vdc.SetCycle(vi);
-         vdc.SetTime(dt_vis*vi);
-         vdc.Save();
-         vi++;
-      }
-
-      // Change time step
-      real_t dt0 = dt;
-      if ((dt_gain > 0))
-      {
-         dt *= pow(cfl_target/cfl, dt_gain);
-         dt = min(dt, dt_max);
-         dt = max(dt, dt_min);
-      }
-
-      // Print cfl and dt to screen
-      if (Mpi::Root())
-      {
-         line(80);
-         cout<<" outflow = "<<outflow<<endl;
-         cout<<" cfl = "<<cfl<<endl;
-         cout<<" dt  = "<<dt0<<" --> "<<dt<<endl;
-         line(80);
-      }
-
-      // Write restart files
-      if (restart_interval > 0 && si%restart_interval == 0)
-      {
-         // Report to screen
-         if (Mpi::Root())
-         {
-            line(80);
-            cout << "Restart output:" << ri << endl;
-            line(80);
-         }
-
-         // Copy solution in grid functions
-         x_u.Distribute(xp.GetBlock(0));
-         x_p.Distribute(xp.GetBlock(1));
-
-         if (nstate == 1)
-         {
-            ode_solver_ws->GetState().Get(0,dxp);
-            dx_u[0]->Distribute(dxp.GetBlock(0));
-            dx_p[0]->Distribute(dxp.GetBlock(1));
-         }
-
-         // Actually write to file
-         rdc.SetCycle(ri);
-         rdc.SetTime(t);
-         rdc.Save();
-         ri++;
-
-         // print meta file
-         if (Mpi::Root())
-         {
-            std::ofstream step("restart/step.dat", std::ifstream::out);
-            step<<t<<"\t"<<si<<"\t"<<ri<<"\t"<<vi<<endl;
-            step<<dt<<endl;
-            step.close();
+            ode_solver_ws->GetState().Set(i, ode_state_cp[i]);
          }
       }
-
 
       if (precice.isTimeWindowComplete())
       {
+         si++;
+         t += dt_used;
+
+         // Postprocess solution
+         real_t cfl = form.GetCFL();
+         real_t outflow = form.GetOutflow();
+         DenseMatrix bdrForce = form.GetForce();
+         if (Mpi::Root())
+         {
+            // Print to file
+            int nbdr = pmesh.bdr_attributes.Size();
+            os << std::setw(10);
+            os << si<<"\t"<<t<<"\t"<<dt<<"\t"<<cfl<<"\t"<<outflow<<"\t";
+            for (int b=0; b<nbdr; ++b)
+            {
+               int bnd = pmesh.bdr_attributes[b];
+               for (int v=0; v<dim; ++v)
+               {
+                  os<<bdrForce(bnd-1,v)<<"\t";
+               }
+            }
+            os<<"\n"<< std::flush;
+
+            // Print line lambda function
+            auto pline = [](int len)
+            {
+               cout<<" +";
+               for (int b=0; b<len; ++b) { cout<<"-"; }
+               cout<<"+\n";
+            };
+
+            // Print boundary header
+            cout<<"\n";
+            pline(10+13*nbdr);
+            cout<<" | Boundary | ";
+            for (int b=0; b<nbdr; ++b)
+            {
+               cout<<std::setw(10)<<pmesh.bdr_attributes[b]<<" | ";
+            }
+            cout<<"\n";
+            pline(10+13*nbdr);
+
+            // Print actual forces
+            char dimName[] = "xyz";
+            for (int v=0; v<dim; ++v)
+            {
+               cout<<" | Force "<<dimName[v]<<"  | ";
+               for (int b=0; b<nbdr; ++b)
+               {
+                  int bnd = pmesh.bdr_attributes[b];
+                  cout<<std::defaultfloat<<std::setprecision(4)<<std::setw(10);
+                  cout<<bdrForce(bnd-1,v)<<" | ";
+               }
+               cout<<"\n";
+            }
+            pline(10+13*nbdr);
+            cout<<"\n"<<std::flush;
+         }
+
+         // Write visualization files
+         while (t >= dt_vis*vi)
+         {
+            // Interpolate solution
+            real_t fac = (t-dt_vis*vi)/dt;
+
+            // Report to screen
+            if (Mpi::Root())
+            {
+               line(80);
+               cout << "Visit output: " <<vi << endl;
+               cout << "        Time: " <<t-dt<<" "<<t-fac*dt<<" "<<t<<endl;
+               line(80);
+            }
+
+            // Copy solution in grid functions
+            add (fac, xp0.GetBlock(0),(1.0-fac), xp.GetBlock(0), xpi.GetBlock(0));
+            x_u.Distribute(xpi.GetBlock(0));
+
+            add (-1.0/dt, xp0.GetBlock(1), 1.0/dt, xp.GetBlock(1), xpi.GetBlock(1));
+            x_p.Distribute(xpi.GetBlock(1));
+
+            // ## Projection for visualisation
+            // ===========================
+            // x_u2.ProjectCoefficient(x_u_coeff);
+            // x_p2.ProjectCoefficient(x_p_coeff);
+            // ===========================
+
+            // Actually write to file
+            vdc.SetCycle(vi);
+            vdc.SetTime(dt_vis*vi);
+            vdc.Save();
+            vi++;
+         }
+
+         // Change time step
+         real_t dt0 = dt;
+         if ((dt_gain > 0))
+         {
+            dt *= pow(cfl_target/cfl, dt_gain);
+            dt = min(dt, dt_max);
+            dt = max(dt, dt_min);
+         }
+
+         // Print cfl and dt to screen
+         if (Mpi::Root())
+         {
+            line(80);
+            cout<<" outflow = "<<outflow<<endl;
+            cout<<" cfl = "<<cfl<<endl;
+            cout<<" dt  = "<<dt0<<" --> "<<dt<<endl;
+            line(80);
+         }
+
+         // Write restart files
+         if (restart_interval > 0 && si%restart_interval == 0)
+         {
+            // Report to screen
+            if (Mpi::Root())
+            {
+               line(80);
+               cout << "Restart output:" << ri << endl;
+               line(80);
+            }
+
+            // Copy solution in grid functions
+            x_u.Distribute(xp.GetBlock(0));
+            x_p.Distribute(xp.GetBlock(1));
+
+            if (nstate == 1)
+            {
+               ode_solver_ws->GetState().Get(0,dxp);
+               dx_u[0]->Distribute(dxp.GetBlock(0));
+               dx_p[0]->Distribute(dxp.GetBlock(1));
+            }
+
+            // Actually write to file
+            rdc.SetCycle(ri);
+            rdc.SetTime(t);
+            rdc.Save();
+            ri++;
+
+            // print meta file
+            if (Mpi::Root())
+            {
+               std::ofstream step("restart/step.dat", std::ifstream::out);
+               step<<t<<"\t"<<si<<"\t"<<ri<<"\t"<<vi<<endl;
+               step<<dt<<endl;
+               step.close();
+            }
+         }
       }
 
       if (Mpi::Root()) { cout<<endl<<endl; }
