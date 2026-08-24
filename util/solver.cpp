@@ -38,6 +38,111 @@ void Evolution::ImplicitSolve(const real_t dt,
    }
 }
 
+// Divergence-free projection of a target velocity field
+void RBVMS::DivFreeProjection(Array<ParFiniteElementSpace *> &spaces,
+                       VectorCoefficient &target,
+                       Array<int> &strong_bdr,
+                       Vector &u_true)
+{
+   ParFiniteElementSpace &ufes = *spaces[0];
+   ParFiniteElementSpace &pfes = *spaces[1];
+
+   // Essential velocity boundary dofs
+   Array<int> ess_bdr(ufes.GetMesh()->bdr_attributes.Max());
+   ess_bdr = 0;
+   for (int b = 0; b < strong_bdr.Size(); b++)
+   {
+      ess_bdr[strong_bdr[b]-1] = 1;
+   }
+   Array<int> ess_tdof_u, empty_tdof_p;
+   ufes.GetEssentialTrueDofs(ess_bdr, ess_tdof_u);
+
+   // Boundary values: u_h = target on strong_bdr
+   ParGridFunction u_bc(&ufes);
+   u_bc = 0.0;
+   u_bc.ProjectBdrCoefficient(target, ess_bdr);
+
+   // Velocity mass matrix (u,v)
+   ParBilinearForm m(&ufes);
+   m.AddDomainIntegrator(new VectorMassIntegrator());
+   m.Assemble();
+
+   // Divergence coupling (q, div u)
+   ParMixedBilinearForm b(&ufes, &pfes);
+   b.AddDomainIntegrator(new VectorDivergenceIntegrator());
+   b.Assemble();
+
+   // Right-hand sides: (target, v) and 0
+   ParLinearForm lu(&ufes);
+   lu.AddDomainIntegrator(new VectorDomainLFIntegrator(target));
+   lu.Assemble();
+
+   ParLinearForm lp(&pfes);
+   lp.Assemble();
+
+   HypreParMatrix M, B;
+   Vector U, Bu, P(pfes.GetTrueVSize()), Bp;
+
+   m.FormLinearSystem(ess_tdof_u, u_bc, lu, M, U, Bu);
+   b.FormRectangularLinearSystem(ess_tdof_u, empty_tdof_p, u_bc, lp, B, P, Bp);
+
+   HypreParMatrix *Bt = B.Transpose();
+
+   Array<int> block_offsets(3);
+   block_offsets[0] = 0;
+   block_offsets[1] = ufes.GetTrueVSize();
+   block_offsets[2] = pfes.GetTrueVSize();
+   block_offsets.PartialSum();
+
+   BlockOperator op(block_offsets);
+   op.SetBlock(0, 0, &M);
+   op.SetBlock(0, 1, Bt);
+   op.SetBlock(1, 0, &B);
+
+   BlockVector rhs(block_offsets), sol(block_offsets);
+   rhs.GetBlock(0) = Bu;
+   rhs.GetBlock(1) = Bp;
+   sol.GetBlock(0) = U;
+   sol.GetBlock(1) = 0.0;
+
+   // Preconditioner
+   CGSolver M_inv(MPI_COMM_WORLD);
+   M_inv.SetOperator(M);
+   M_inv.SetRelTol(1e-8);
+   M_inv.SetMaxIter(50);
+   M_inv.SetPrintLevel(0);
+
+   ParBilinearForm mp(&pfes);
+   mp.AddDomainIntegrator(new MassIntegrator());
+   mp.Assemble();
+   HypreParMatrix Mp;
+   mp.FormSystemMatrix(empty_tdof_p, Mp);
+   // HypreDiagScale Pdiag(Mp);
+   CGSolver P_inv(MPI_COMM_WORLD);
+   P_inv.SetOperator(Mp);
+   P_inv.SetRelTol(1e-8);
+   P_inv.SetMaxIter(50);
+   P_inv.SetPrintLevel(0);
+
+   BlockDiagonalPreconditioner prec(block_offsets);
+   prec.SetDiagonalBlock(0, &M_inv);
+   prec.SetDiagonalBlock(1, &P_inv);
+
+   MINRESSolver minres(MPI_COMM_WORLD);
+   minres.SetOperator(op);
+   minres.SetPreconditioner(prec);
+   minres.SetRelTol(1e-10);
+   minres.SetAbsTol(0.0);
+   minres.SetMaxIter(500);
+   minres.SetPrintLevel(Mpi::Root() ? 1 : -1);
+   minres.iterative_mode = true;
+   minres.Mult(rhs, sol);
+
+   u_true = sol.GetBlock(0);
+
+   delete Bt;
+}
+
 // Compute a norm for each component
 void NewtonSystemSolver::Norms(const Vector &r, Vector& lnorm) const
 {

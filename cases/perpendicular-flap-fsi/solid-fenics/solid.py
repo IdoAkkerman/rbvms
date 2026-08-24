@@ -32,7 +32,7 @@ def neumann_boundary(x, on_boundary):
 dim = 2  # number of dimensions
 H = 1
 W = 0.1
-rho = 1.0; #3000
+rho = 3000
 E = 4000000
 nu = 0.3
 

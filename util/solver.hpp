@@ -122,6 +122,18 @@ public:
 
 };
 
+/** Project @a target onto the velocity space @a spaces[0], discretely
+    divergence-free with respect to the pressure space @a spaces[1], via
+    the Stokes-type (Leray) saddle-point projection
+       (u_h, v) + (lambda_h, div v) = (target, v)   for all v in V_h,
+       (q, div u_h)                 = 0              for all q in Q_h,
+    with u_h = target enforced strongly on @a strong_bdr. Fills @a u_true
+    with the resulting velocity true-dof vector. */
+void DivFreeProjection(Array<ParFiniteElementSpace *> &spaces,
+                       VectorCoefficient &target,
+                       Array<int> &strong_bdr,
+                       Vector &u_true);
+
 // Custom block preconditioner for the Jacobian
 class JacobianPreconditioner : public
    BlockLowerTriangularPreconditioner

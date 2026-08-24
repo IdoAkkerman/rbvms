@@ -35,6 +35,8 @@ MeshMotion::MeshMotion(precice::Participant &part,
    vertexSize = fsi_dofs.Size()/dim;
 
    // Get boundary coordinates
+   Vector nodes_true(pfes->GetTrueVSize());
+   nodes->GetTrueDofs(nodes_true);
    std::vector<double>  vertices(vertexSize * dim);
    vertexIDs.resize(vertexSize);
 
@@ -44,7 +46,7 @@ MeshMotion::MeshMotion(precice::Participant &part,
       {
          for (int i = 0; i < vertexSize; i++)
          {
-            vertices.at(j + i*dim) = nodes->Elem(fsi_dofs[i + j*vertexSize]);
+            vertices.at(j + i*dim) = nodes_true(fsi_dofs[i + j*vertexSize]);
          }
       }
    }
@@ -54,7 +56,7 @@ MeshMotion::MeshMotion(precice::Participant &part,
       {
          for (int j = 0; j < dim; j++)
          {
-            vertices.at(j + i*dim) = nodes->Elem(fsi_dofs[i*dim + j]);
+            vertices.at(j + i*dim) = nodes_true(fsi_dofs[i*dim + j]);
          }
       }
    }
@@ -107,14 +109,14 @@ void MeshMotion::Solve(real_t dt)
                         disp);
 
    // Set boundary condition for incremental displacement
-   pgf_d = 0.0;
+   Vector d_true(pfes->GetTrueVSize()); d_true = 0.0;
    if (pfes->GetOrdering() == Ordering::byNODES)
    {
       for (int j = 0; j < dim; j++)
       {
          for (int i = 0; i < vertexSize; i++)
          {
-            pgf_d[fsi_dofs[i + j*vertexSize]] = disp[j + i*dim] - disp0[j + i*dim] ;
+            d_true(fsi_dofs[i + j*vertexSize]) = disp[j + i*dim] - disp0[j + i*dim] ;
 
          }
       }
@@ -125,10 +127,11 @@ void MeshMotion::Solve(real_t dt)
       {
          for (int j = 0; j < dim; j++)
          {
-            pgf_d[fsi_dofs[i*dim + j]] = disp[j + i*dim] - disp0[j + i*dim] ;
+            d_true(fsi_dofs[i*dim + j]) = disp[j + i*dim] - disp0[j + i*dim] ;
          }
       }
    }
+   pgf_d.Distribute(d_true);
 
    // Compute linear system
    a->Update();
@@ -231,9 +234,14 @@ void MeshMotion::SetTimeLevel(double alpha)
 
 void MeshMotion::SetVelocityBCs(Vector &x)
 {
+   // ## Claude code: pgf_um is a local grid function; extract its true-dof
+   // ## Claude code: values before indexing with the true-dof list fsi_dofs
+   // ## Claude code: (x, e.g. xp.GetBlock(0), is already a true-dof vector).
+   Vector um_true(pfes->GetTrueVSize());
+   pgf_um.GetTrueDofs(um_true);
    for (int i = 0; i < fsi_dofs.Size(); i++)
    {
-      x[fsi_dofs[i]] = pgf_um[fsi_dofs[i]];
+      x[fsi_dofs[i]] = um_true(fsi_dofs[i]);
    }
 }
 

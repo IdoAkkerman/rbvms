@@ -477,8 +477,10 @@ int main(int argc, char *argv[])
    LibCoefficient blowing(lib_file, "blowing", false, 0.0);
 
    // Configure precice
+   // ## Claude code: pass the actual MPI rank/size so preCICE knows this
+   // ## Claude code: participant is running with num_procs processes
    precice::Participant precice(std::string(precice_solverName),
-                                std::string(precice_configFile), 0, 1); //??,rank,size);
+                                std::string(precice_configFile), myid, num_procs);
 
    RBVMS::MeshMotion meshMotion(precice, pmesh, precice_meshName, bdr_is_fsi);
    RBVMS::ForceExtraction pgf_force (spaces, bdr_is_fsi, mu);
@@ -612,14 +614,13 @@ int main(int argc, char *argv[])
    }
    else
    {
-      // Define initial condition from file
+      // Define initial condition from function, discretely divergence-free
       t = 0.0; si = 0; ri = 1; vi = 1;
-      //LibVectorCoefficient sol(dim, lib_file, "sol_u");
       sol.SetTime(-1.0);
-      x_u.ProjectCoefficient(sol, ProjectType::ELEMENT);
+      RBVMS::DivFreeProjection(spaces, sol, strong_bdr, xp.GetBlock(0));
+      x_u.Distribute(xp.GetBlock(0));
       x_p = 0.0;
 
-      x_u.GetTrueDofs(xp.GetBlock(0));
       x_p.GetTrueDofs(xp.GetBlock(1));
       // ## Projection for visualisation
       // ===========================

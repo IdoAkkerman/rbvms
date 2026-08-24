@@ -10,7 +10,7 @@ exe=../../../build/rbvms/rbvms-fsi
 rm output* log*
 
 #valgrind --tool=memcheck \
-mpirun -n 1 $exe -m $mesh -o 2 -r 2 \
+mpirun -n 22 $exe -m $mesh -o 2 -r 2 \
 --dyn-visc 1.0 --density 1.0 \
 --strong-bdr "1 4 5" --outflow-bdr "20 21" --fsi-bdr 3 -l perpendicular-flap-fsi.so \
 -s 45 -dt 0.001 --dt_vis 0.01 -tf 5.0 \
